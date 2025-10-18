@@ -6,70 +6,28 @@ pipeline {
         jdk 'JDK17'
     }
 
-    // 🎯 TRIGGERS - Déclencheurs automatiques
-    triggers {
-        pollSCM('H/2 * * * *')  // ✅ Vérifie Git toutes les 2 minutes (idéal pour le dev)
-    }
-
     stages {
-        // 📥 Étape 1 : Récupération du code depuis VOTRE branche
-        stage('Cloner la branche feature') {
+        stage('Clone and Build') {
             steps {
                 git branch: 'feature/pipeline-jenkins',
                 url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
-                // ℹ️ Pas besoin de credentialsId si le repo est public
-            }
-        }
 
-        // 🔨 Étape 2 : Compilation
-        stage('Compilation') {
-            steps {
-                bat 'mvn clean compile'
-                // 💡 Pour Linux, remplacez par: sh 'mvn clean compile'
-            }
-        }
-
-        // 🧪 Étape 3 : Tests unitaires
-        stage('Tests unitaires') {
-            steps {
-                bat 'mvn test'
-            }
-            post {
-                always {
-                    junit '**/target/surefire-reports/*.xml'  // ✅ Publie les résultats JUnit
+                dir('library-management') {
+                    bat 'mvn clean compile test package'
                 }
-            }
-        }
-
-        // 📦 Étape 4 : Packaging
-        stage('Création du package') {
-            steps {
-                bat 'mvn package -DskipTests'  // ✅ Package sans relancer les tests
             }
             post {
                 success {
-                    archiveArtifacts artifacts: '**/target/*.war', fingerprint: true
-                    echo '🎉 Package créé et archivé avec succès!'
+                    archiveArtifacts 'library-management/**/target/*.war'
+                    junit 'library-management/**/target/surefire-reports/*.xml'
                 }
             }
         }
     }
 
-    // 📊 Post-traitement
     post {
         always {
-            echo "🔚 Pipeline TERMINÉ - Statut: ${currentBuild.currentResult}"
-            echo "📝 URL du build: ${env.BUILD_URL}"
-            // cleanWs()  // 🚨 Désactivé pendant le dev pour debugger
-        }
-        success {
-            echo '✅ ✅ ✅ BUILD RÉUSSI! Votre pipeline fonctionne! ✅ ✅ ✅'
-        }
-        failure {
-            echo '❌ ❌ ❌ BUILD ÉCHOUÉ! Vérifiez les logs ci-dessous. ❌ ❌ ❌'
-        }
-        unstable {
-            echo '⚠️  Build instable - Certains tests ont échoué'
+            echo "Build finished: ${currentBuild.currentResult}"
         }
     }
 }
