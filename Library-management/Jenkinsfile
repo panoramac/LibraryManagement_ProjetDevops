@@ -7,41 +7,24 @@ pipeline {
     }
 
     stages {
-        stage('Clone Repository') {
+        stage('Build with Encoding Fix') {
             steps {
                 git branch: 'feature/pipeline-jenkins',
                 url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
-            }
-        }
 
-        stage('Build Back-End') {
-            steps {
-                // 🎯 CHEMIN CORRECT : Library-management/Back-End
                 dir('Library-management/Back-End') {
-                    bat 'mvn clean compile test package'
+                    // 🎯 FORCER l'encodage Windows-1252 pour Maven
+                    bat 'mvn clean compile test package -Dproject.build.sourceEncoding=windows-1252 -Dproject.build.resourceEncoding=windows-1252'
                 }
             }
             post {
                 success {
-                    // 🎯 Chemins corrigés pour l'archivage
-                    archiveArtifacts 'Library-management/Back-End/**/target/*.war'
                     archiveArtifacts 'Library-management/Back-End/**/target/*.jar'
+                    archiveArtifacts 'Library-management/Back-End/**/target/*.war'
                     junit 'Library-management/Back-End/**/target/surefire-reports/*.xml'
+                    echo '🎉 🎉🎉 FÉLICITATIONS ! PIPELINE CI/CD OPÉRATIONNEL ! 🎉🎉🎉'
                 }
             }
-        }
-    }
-
-    post {
-        always {
-            echo "Build ${currentBuild.currentResult} - Voir: ${env.BUILD_URL}"
-        }
-        success {
-            echo '✅ ✅✅ BUILD RÉUSSI ! Pipeline fonctionne ! ✅✅✅'
-            echo '🎉 Félicitations ! Votre pipeline CI/CD est opérationnel !'
-        }
-        failure {
-            echo '❌ Build échoué - Vérifiez les logs ci-dessus'
         }
     }
 }
