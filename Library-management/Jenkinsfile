@@ -2,62 +2,74 @@ pipeline {
     agent any
 
     tools {
-        maven 'Maven3'      // Nom du Maven configuré dans Jenkins (Manage Jenkins > Tools)
-        jdk 'JDK17'         // Nom du JDK configuré dans Jenkins
+        maven 'Maven3'
+        jdk 'JDK17'
     }
 
-    environment {
-        SONARQUBE = credentials('sonarqube-token') // si tu utilises un token Jenkins Credential
+    // 🎯 TRIGGERS - Déclencheurs automatiques
+    triggers {
+        pollSCM('H/2 * * * *')  // ✅ Vérifie Git toutes les 2 minutes (idéal pour le dev)
     }
 
     stages {
-        stage('Cloner le repo') {
+        // 📥 Étape 1 : Récupération du code depuis VOTRE branche
+        stage('Cloner la branche feature') {
             steps {
-                git branch: 'develop', url:' https://github.com/panoramac/LibraryManagement_ProjetDevops.git '
+                git branch: 'feature/pipeline-jenkins',
+                url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
+                // ℹ️ Pas besoin de credentialsId si le repo est public
             }
         }
 
+        // 🔨 Étape 2 : Compilation
         stage('Compilation') {
             steps {
-                sh 'mvn clean compile'
+                bat 'mvn clean compile'
+                // 💡 Pour Linux, remplacez par: sh 'mvn clean compile'
             }
         }
 
+        // 🧪 Étape 3 : Tests unitaires
         stage('Tests unitaires') {
             steps {
-                sh 'mvn test'
+                bat 'mvn test'
+            }
+            post {
+                always {
+                    junit '**/target/surefire-reports/*.xml'  // ✅ Publie les résultats JUnit
+                }
             }
         }
 
-        stage('Package .war/.jar') {
+        // 📦 Étape 4 : Packaging
+        stage('Création du package') {
             steps {
-                sh 'mvn package'
+                bat 'mvn package -DskipTests'  // ✅ Package sans relancer les tests
             }
             post {
                 success {
                     archiveArtifacts artifacts: '**/target/*.war', fingerprint: true
-                }
-            }
-        }
-
-        stage('Analyse SonarQube') {
-            environment {
-                SONAR_HOST_URL = 'http://localhost:9000' // ton serveur SonarQube
-            }
-            steps {
-                withSonarQubeEnv('SonarQube') {
-                    sh 'mvn sonar:sonar -Dsonar.projectKey=mon-projet -Dsonar.host.url=$SONAR_HOST_URL'
+                    echo '🎉 Package créé et archivé avec succès!'
                 }
             }
         }
     }
 
+    // 📊 Post-traitement
     post {
+        always {
+            echo "🔚 Pipeline TERMINÉ - Statut: ${currentBuild.currentResult}"
+            echo "📝 URL du build: ${env.BUILD_URL}"
+            // cleanWs()  // 🚨 Désactivé pendant le dev pour debugger
+        }
         success {
-            echo '✅ Build réussi !'
+            echo '✅ ✅ ✅ BUILD RÉUSSI! Votre pipeline fonctionne! ✅ ✅ ✅'
         }
         failure {
-            echo '❌ Build échoué !'
+            echo '❌ ❌ ❌ BUILD ÉCHOUÉ! Vérifiez les logs ci-dessous. ❌ ❌ ❌'
+        }
+        unstable {
+            echo '⚠️  Build instable - Certains tests ont échoué'
         }
     }
 }
