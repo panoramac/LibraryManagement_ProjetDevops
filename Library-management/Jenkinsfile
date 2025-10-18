@@ -12,7 +12,7 @@ pipeline {
                 git branch: 'feature/pipeline-jenkins',
                 url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
 
-                dir('library-management') {
+                dir('Library-management') {
                     bat 'mvn clean compile test package'
                 }
             }
