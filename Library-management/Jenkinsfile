@@ -1,0 +1,63 @@
+pipeline {
+    agent any
+
+    tools {
+        maven 'Maven3'      // Nom du Maven configuré dans Jenkins (Manage Jenkins > Tools)
+        jdk 'JDK17'         // Nom du JDK configuré dans Jenkins
+    }
+
+    environment {
+        SONARQUBE = credentials('sonarqube-token') // si tu utilises un token Jenkins Credential
+    }
+
+    stages {
+        stage('Cloner le repo') {
+            steps {
+                git branch: 'develop', url:' https://github.com/panoramac/LibraryManagement_ProjetDevops.git '
+            }
+        }
+
+        stage('Compilation') {
+            steps {
+                sh 'mvn clean compile'
+            }
+        }
+
+        stage('Tests unitaires') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+
+        stage('Package .war/.jar') {
+            steps {
+                sh 'mvn package'
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: '**/target/*.war', fingerprint: true
+                }
+            }
+        }
+
+        stage('Analyse SonarQube') {
+            environment {
+                SONAR_HOST_URL = 'http://localhost:9000' // ton serveur SonarQube
+            }
+            steps {
+                withSonarQubeEnv('SonarQube') {
+                    sh 'mvn sonar:sonar -Dsonar.projectKey=mon-projet -Dsonar.host.url=$SONAR_HOST_URL'
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '✅ Build réussi !'
+        }
+        failure {
+            echo '❌ Build échoué !'
+        }
+    }
+}
