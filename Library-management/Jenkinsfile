@@ -1,0 +1,91 @@
+pipeline {
+    agent any
+
+    tools {
+        maven 'Maven3'
+        jdk 'JDK17'
+    }
+
+    environment {
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
+        IMAGE_NAME = "elkarkafidouaa/library-backend"
+        IMAGE_TAG = "v1"
+    }
+
+    stages {
+
+        stage('Checkout Source') {
+            steps {
+                git branch: 'feature/pipeline-jenkins',
+                    url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
+            }
+        }
+
+        stage('Build with Maven') {
+            steps {
+                dir('Library-management/Back-End') {
+                    bat 'mvn clean compile test package -DskipTests -Dproject.build.sourceEncoding=ISO-8859-1'
+                }
+            }
+        }
+
+        stage('Archive Artifacts & Test Reports') {
+            steps {
+                archiveArtifacts 'Library-management/Back-End/**/target/*.jar'
+                junit 'Library-management/Back-End/**/target/surefire-reports/*.xml'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    dir('Library-management/Back-End') {
+                        bat """
+                        docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Push Docker Image to Docker Hub') {
+            steps {
+                script {
+                    bat """
+                    echo ${DOCKERHUB_CREDENTIALS_PSW} | docker login -u ${DOCKERHUB_CREDENTIALS_USR} --password-stdin
+                    docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                    docker logout
+                    """
+                }
+            }
+        }
+
+        stage('Run Container for Test') {
+            steps {
+                script {
+                    bat """
+                    docker run -d -p 9092:9090 --name test-backend ${IMAGE_NAME}:${IMAGE_TAG}
+                    timeout /t 10
+                    docker ps
+                    docker stop test-backend
+                    docker rm test-backend
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "✅ Build terminé : ${currentBuild.currentResult}"
+            echo "🔗 URL du build : ${env.BUILD_URL}"
+        }
+        success {
+            echo '🎉 Succès total : Image Docker construite et publiée sur Docker Hub !'
+            echo "📦 Image : ${IMAGE_NAME}:${IMAGE_TAG}"
+        }
+        failure {
+            echo '❌ Le pipeline a échoué. Consultez les logs pour identifier l’erreur.'
+        }
+    }
+}
