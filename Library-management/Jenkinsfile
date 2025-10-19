@@ -7,8 +7,8 @@ pipeline {
     }
 
     environment {
-        DOCKERHUB_CREDENTIALS = credentials('dockerhub')
-        IMAGE_NAME = "elkarkafidouaa/library-backend"
+        IMAGE_NAME_BACK = "elkarkafidouaa/library-backend"
+        IMAGE_NAME_FRONT = "elkarkafidouaa/library-frontend"
         IMAGE_TAG = "v1"
     }
 
@@ -21,54 +21,54 @@ pipeline {
             }
         }
 
-        stage('Build with Maven') {
+        stage('Build Backend with Maven') {
             steps {
                 dir('Library-management/Back-End') {
-                    bat 'mvn clean compile test package -DskipTests -Dproject.build.sourceEncoding=ISO-8859-1'
+                    bat 'mvn clean package -DskipTests'
                 }
             }
         }
 
-        stage('Archive Artifacts & Test Reports') {
+        stage('Archive Backend Jar') {
             steps {
-                archiveArtifacts 'Library-management/Back-End/**/target/*.jar'
-                junit 'Library-management/Back-End/**/target/surefire-reports/*.xml'
+                archiveArtifacts artifacts: 'Library-management/Back-End/**/target/*.jar', followSymlinks: false
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build Docker Images') {
             steps {
                 script {
-                    dir('Library-management/Back-End') {
+                    bat """
+                    docker build -t ${IMAGE_NAME_BACK}:${IMAGE_TAG} -f Library-management/Back-End/Dockerfile .
+                    docker build -t ${IMAGE_NAME_FRONT}:${IMAGE_TAG} -f Library-management/Front-End/Dockerfile .
+                    """
+                }
+            }
+        }
+
+        stage('Push Docker Images to Docker Hub') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         bat """
-                        docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                        echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin
+                        docker push ${IMAGE_NAME_BACK}:${IMAGE_TAG}
+                        docker push ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
+                        docker logout
                         """
                     }
                 }
             }
         }
 
-        stage('Push Docker Image to Docker Hub') {
+        stage('Test with docker-compose') {
             steps {
                 script {
                     bat """
-                    echo ${DOCKERHUB_CREDENTIALS_PSW} | docker login -u ${DOCKERHUB_CREDENTIALS_USR} --password-stdin
-                    docker push ${IMAGE_NAME}:${IMAGE_TAG}
-                    docker logout
-                    """
-                }
-            }
-        }
-
-        stage('Run Container for Test') {
-            steps {
-                script {
-                    bat """
-                    docker run -d -p 9092:9090 --name test-backend ${IMAGE_NAME}:${IMAGE_TAG}
+                    docker compose -f Library-management/docker-compose.yml up -d
                     timeout /t 10
                     docker ps
-                    docker stop test-backend
-                    docker rm test-backend
+                    docker compose -f Library-management/docker-compose.yml down
                     """
                 }
             }
@@ -76,16 +76,11 @@ pipeline {
     }
 
     post {
-        always {
-            echo "✅ Build terminé : ${currentBuild.currentResult}"
-            echo "🔗 URL du build : ${env.BUILD_URL}"
-        }
         success {
-            echo '🎉 Succès total : Image Docker construite et publiée sur Docker Hub !'
-            echo "📦 Image : ${IMAGE_NAME}:${IMAGE_TAG}"
+            echo "🎉 Pipeline réussi ! Images ${IMAGE_TAG} publiées sur Docker Hub."
         }
         failure {
-            echo '❌ Le pipeline a échoué. Consultez les logs pour identifier l’erreur.'
+            echo "❌ Le pipeline a échoué, consultez les logs Jenkins."
         }
     }
 }
