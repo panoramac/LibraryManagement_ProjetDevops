@@ -1,31 +1,131 @@
-stage('Run Containers for Test') {
-    steps {
-        script {
-            bat '''
-            docker stop test-backend test-frontend 2>nul || echo No test containers to stop
-            docker rm test-backend test-frontend 2>nul || echo No test containers to remove
-            '''
+pipeline {
+    agent any
 
-            // Ports alternatifs si 80 est occupé
-            bat """
-            docker run -d -p 9091:9090 --name test-backend ${IMAGE_NAME_BACK}:${IMAGE_TAG}
-            docker run -d -p 8080:80 --name test-frontend ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
-            timeout /t 10
-            echo "Containers status:"
-            docker ps
-            """
+    tools {
+        maven 'Maven3'
+        jdk 'JDK17'
+    }
 
-            bat """
-            echo "Testing containers..."
-            curl -f http://localhost:9091/actuator/health || echo "Backend health check failed"
-            curl -f http://localhost:8080/ || echo "Frontend check failed"
-            """
+    environment {
+        IMAGE_NAME_BACK = "elkarkafidouaa/library-backend"
+        IMAGE_NAME_FRONT = "elkarkafidouaa/library-frontend"
+        IMAGE_TAG = "v1"
+    }
 
-            bat """
-            docker stop test-backend test-frontend
-            docker rm test-backend test-frontend
-            echo "Test completed"
-            """
+    stages {
+        /********************* 🧱 1. BUILD MAVEN *********************/
+        stage('Build Project') {
+            steps {
+                git branch: 'feature/docker',
+                url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
+
+                dir('Library-management/Back-End') {
+                    bat 'mvn clean compile test package -Dproject.build.sourceEncoding=ISO-8859-1'
+                }
+            }
+            post {
+                success {
+                    archiveArtifacts 'Library-management/Back-End/**/target/*.jar'
+                    junit 'Library-management/Back-End/**/target/surefire-reports/*.xml'
+                    echo 'Build Maven successful'
+                }
+            }
+        }
+
+        /********************* 🐳 2. BUILD DES IMAGES DOCKER *********************/
+        stage('Build Docker Images') {
+            steps {
+                script {
+                    // Nettoyage des containers existants
+                    bat '''
+                    docker stop library-backend library-frontend 2>nul || echo No containers to stop
+                    docker rm library-backend library-frontend 2>nul || echo No containers to remove
+                    '''
+
+                    // Build backend
+                    dir('Library-management/Back-End') {
+                        bat "docker build -t ${IMAGE_NAME_BACK}:${IMAGE_TAG} ."
+                    }
+
+                    // Build frontend
+                    dir('Library-management/Front-End') {
+                        bat "docker build -t ${IMAGE_NAME_FRONT}:${IMAGE_TAG} ."
+                    }
+
+                    // Vérification des images
+                    bat 'docker images | findstr library'
+                }
+            }
+        }
+
+        /********************* ☁️ 3. PUSH VERS DOCKER HUB *********************/
+        stage('Push Docker Images to Docker Hub') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        bat """
+                        echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
+                        docker push ${IMAGE_NAME_BACK}:${IMAGE_TAG}
+                        docker push ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
+                        docker logout
+                        echo "Images pushed to Docker Hub"
+                        """
+                    }
+                }
+            }
+        }
+
+        /********************* 🧪 4. TEST DES CONTAINERS *********************/
+        stage('Run Containers for Test') {
+            steps {
+                script {
+                    // Nettoyage des containers de test existants
+                    bat '''
+                    docker stop test-backend test-frontend 2>nul || echo No test containers to stop
+                    docker rm test-backend test-frontend 2>nul || echo No test containers to remove
+                    '''
+
+                    // Démarrer les containers de test avec les bons ports
+                    bat """
+                    docker run -d -p 9091:9090 --name test-backend ${IMAGE_NAME_BACK}:${IMAGE_TAG}
+                    docker run -d -p 80:80 --name test-frontend ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
+                    timeout /t 10
+                    echo "Containers status:"
+                    docker ps
+                    """
+
+                    // Test simple
+                    bat """
+                    echo "Testing containers..."
+                    curl -f http://localhost:9091/actuator/health || echo "Backend health check failed"
+                    curl -f http://localhost:80/ || echo "Frontend check failed"
+                    """
+
+                    // Nettoyage
+                    bat """
+                    docker stop test-backend test-frontend
+                    docker rm test-backend test-frontend
+                    echo "Test completed"
+                    """
+                }
+            }
+        }
+    }
+
+    /********************* 🏁 POST-BUILD *********************/
+    post {
+        always {
+            echo "Build finished: ${currentBuild.currentResult}"
+            echo "Build URL: ${env.BUILD_URL}"
+        }
+        success {
+            echo 'SUCCESS! CI/CD Pipeline working perfectly!'
+            echo "Published images:"
+            echo "   - ${IMAGE_NAME_BACK}:${IMAGE_TAG}"
+            echo "   - ${IMAGE_NAME_FRONT}:${IMAGE_TAG}"
+        }
+        failure {
+            echo 'Pipeline failed. Check Jenkins logs for details.'
         }
     }
 }
