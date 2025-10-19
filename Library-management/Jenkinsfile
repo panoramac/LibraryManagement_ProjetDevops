@@ -42,12 +42,12 @@ pipeline {
                     docker rm library-backend library-frontend 2>nul || echo No containers to remove
                     '''
 
-                    // Build backend
+                    // Build backend - CORRIGÉ : ajout des commandes de build
                     dir('Library-management/Back-End') {
                         bat "docker build -t ${IMAGE_NAME_BACK}:${IMAGE_TAG} ."
                     }
 
-                    // Build frontend
+                    // Build frontend - CORRIGÉ : ajout des commandes de build
                     dir('Library-management/Front-End') {
                         bat "docker build -t ${IMAGE_NAME_FRONT}:${IMAGE_TAG} ."
                     }
@@ -85,7 +85,7 @@ pipeline {
                     docker rm test-backend test-frontend 2>nul || echo No test containers to remove
                     '''
 
-                    // Démarrer les containers de test avec les bons ports
+                    // Démarrer les containers de test
                     bat """
                     docker run -d -p 9091:9090 --name test-backend ${IMAGE_NAME_BACK}:${IMAGE_TAG}
                     docker run -d -p 80:80 --name test-frontend ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
