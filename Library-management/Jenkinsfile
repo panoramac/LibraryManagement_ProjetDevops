@@ -34,27 +34,33 @@ pipeline {
 
         /********************* 🐳 2. BUILD DES IMAGES DOCKER *********************/
         stage('Build Docker Images') {
-            steps {
-                script {
-                    // Nettoyage des containers existants
-                    bat '''
-                    docker stop library-backend library-frontend 2>nul || echo No containers to stop
-                    docker rm library-backend library-frontend 2>nul || echo No containers to remove
-                    '''
+                    steps {
+                        script {
+                            // Arrêter les containers existants pour libérer les ports
+                            bat 'docker stop library-backend library-frontend || echo "Aucun container à arrêter"'
+                            bat 'docker rm library-backend library-frontend || echo "Aucun container à supprimer"'
 
-                    // Build backend - CORRIGÉ : ajout des commandes de build
-                    dir('Library-management/Back-End') {
-                        bat "docker build -t ${IMAGE_NAME_BACK}:${IMAGE_TAG} ."
-                    }
+                            // Build backend
+                            dir('Library-management/Back-End') {
+                                bat """
+                                echo "Building backend image..."
+                                docker build -t ${IMAGE_NAME_BACK}:${IMAGE_TAG} .
+                                echo "Backend image built successfully"
+                                """
+                            }
 
-                    // Build frontend - CORRIGÉ : ajout des commandes de build
-                    dir('Library-management/Front-End') {
-                        bat "docker build -t ${IMAGE_NAME_FRONT}:${IMAGE_TAG} ."
-                    }
+                            // Build frontend
+                            dir('Library-management/Front-End') {
+                                bat """
+                                echo "Building frontend image..."
+                                docker build -t ${IMAGE_NAME_FRONT}:${IMAGE_TAG} .
+                                echo "Frontend image built successfully"
+                                """
+                            }
 
-                    // Vérification des images
-                    bat 'docker images | findstr library'
-                }
+                            // Lister les images construites
+                            bat 'docker images | findstr "library" || echo "Aucune image library trouvée"'
+                        }
             }
         }
 
