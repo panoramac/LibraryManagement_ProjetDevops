@@ -7,258 +7,125 @@ pipeline {
     }
 
     environment {
-        // Configuration des images Docker
         IMAGE_NAME_BACK = "elkarkafidouaa/library-backend"
         IMAGE_NAME_FRONT = "elkarkafidouaa/library-frontend"
-        IMAGE_TAG = "v1-${env.BUILD_ID}"
-
-        // Ports de test
-        BACKEND_TEST_PORT = "9091"
-        FRONTEND_TEST_PORT = "8080"
+        IMAGE_TAG = "v1"
     }
 
     stages {
-        /******************************************************************
-         * 1. RÉCUPÉRATION ET BUILD DU PROJET
-         *****************************************************************/
-        stage('📥 Checkout and Build') {
+        /********************* 🧱 1. BUILD MAVEN *********************/
+        stage('Build Project') {
             steps {
-                script {
-                    echo "🔧 Étape 1: Récupération du code et build Maven"
+                git branch: 'feature/docker',
+                url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
 
-                    // Checkout du code source
-                    git branch: 'feature/docker',
-                    url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
-
-                    // Build Maven avec gestion d'erreur
-                    dir('Library-management/Back-End') {
-                        bat """
-                        echo "Building Java application..."
-                        mvn clean compile test package -Dproject.build.sourceEncoding=UTF-8
-                        """
-                    }
+                dir('Library-management/Back-End') {
+                    bat 'mvn clean compile test package -Dproject.build.sourceEncoding=ISO-8859-1'
                 }
             }
             post {
                 success {
-                    echo "✅ Build Maven réussi"
                     archiveArtifacts 'Library-management/Back-End/**/target/*.jar'
                     junit 'Library-management/Back-End/**/target/surefire-reports/*.xml'
-                }
-                failure {
-                    echo "❌ Échec du build Maven"
-                    error "Le build Maven a échoué - Vérifiez le code source"
+                    echo 'Build Maven successful'
                 }
             }
         }
 
-        /******************************************************************
-         * 2. CONSTRUCTION DES IMAGES DOCKER
-         *****************************************************************/
-        stage('🐳 Build Docker Images') {
-            steps {
-                script {
-                    echo "🔧 Étape 2: Construction des images Docker"
+        /********************* 🐳 2. BUILD DES IMAGES DOCKER *********************/
+        stage('Build Docker Images') {
+                    steps {
+                        script {
 
-                    // Build de l'image backend
-                    dir('Library-management/Back-End') {
-                        bat """
-                        echo "Building backend Docker image..."
-                        docker build --no-cache -t ${IMAGE_NAME_BACK}:${IMAGE_TAG} .
-                        echo "✅ Backend image built: ${IMAGE_NAME_BACK}:${IMAGE_TAG}"
-                        """
-                    }
 
-                    // Build de l'image frontend
-                    dir('Library-management/Front-End') {
-                        bat """
-                        echo "Building frontend Docker image..."
-                        docker build -t ${IMAGE_NAME_FRONT}:${IMAGE_TAG} .
-                        echo "✅ Frontend image built: ${IMAGE_NAME_FRONT}:${IMAGE_TAG}"
-                        """
-                    }
+                         // Build backend
+                            dir('Library-management/Back-End') {
+                                bat """
+                                echo "Building backend image..."
+                                docker build -t ${IMAGE_NAME_BACK}:${IMAGE_TAG} .
+                                echo "Backend image built successfully"
+                                """
+                            }
 
-                    // Vérification des images construites
-                    bat """
-                    echo "📋 Liste des images Docker construites:"
-                    docker images | findstr "library" || echo "Aucune image library trouvée"
-                    """
-                }
-            }
-            post {
-                failure {
-                    echo "❌ Échec de la construction des images Docker"
-                }
+                            // Build frontend
+                            dir('Library-management/Front-End') {
+                                bat """
+                                echo "Building frontend image..."
+                                docker build -t ${IMAGE_NAME_FRONT}:${IMAGE_TAG} .
+                                echo "Frontend image built successfully"
+                                """
+                            }
+
+                            // Lister les images construites
+                            bat 'docker images | findstr "library" || echo "Aucune image library trouvée"'
+                        }
             }
         }
 
-        /******************************************************************
-         * 3. PUBLICATION SUR DOCKER HUB
-         *****************************************************************/
-        stage('☁️ Push to Docker Hub') {
+        /********************* ☁️ 3. PUSH VERS DOCKER HUB *********************/
+        stage('Push Docker Images to Docker Hub') {
             steps {
                 script {
-                    echo "🔧 Étape 3: Publication sur Docker Hub"
-
-                    withCredentials([usernamePassword(
-                        credentialsId: 'dockerhub',
-                        usernameVariable: 'DOCKER_USER',
-                        passwordVariable: 'DOCKER_PASS'
-                    )]) {
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         bat """
-                        echo "🔐 Authentification à Docker Hub..."
                         echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
-
-                        echo "📤 Pushing backend image..."
                         docker push ${IMAGE_NAME_BACK}:${IMAGE_TAG}
-
-                        echo "📤 Pushing frontend image..."
                         docker push ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
-
-                        echo "🚪 Logout from Docker Hub..."
                         docker logout
-
-                        echo "✅ Images publiées avec succès"
+                        echo "Images pushed to Docker Hub"
                         """
                     }
                 }
             }
-            post {
-                success {
-                    echo "✅ Images Docker publiées sur Docker Hub"
-                    echo "Backend: ${IMAGE_NAME_BACK}:${IMAGE_TAG}"
-                    echo "Frontend: ${IMAGE_NAME_FRONT}:${IMAGE_TAG}"
-                }
-                failure {
-                    echo "❌ Échec de la publication sur Docker Hub"
-                }
-            }
         }
 
-        /******************************************************************
-         * 4. TESTS D'INTÉGRATION
-         *****************************************************************/
-        stage('🧪 Integration Tests') {
+        /********************* 🧪 4. TEST DES CONTAINERS *********************/
+        stage('Run Containers for Test') {
             steps {
                 script {
-                    echo "🔧 Étape 4: Tests d'intégration des containers"
 
-                    // Nettoyage des containers existants
+
+                    // Démarrer les containers de test
                     bat """
-                    echo "🧹 Nettoyage des containers existants..."
-                    docker stop test-backend test-frontend 2>nul || echo "Aucun container à arrêter"
-                    docker rm test-backend test-frontend 2>nul || echo "Aucun container à supprimer"
+                    docker run -d -p 9091:9090 --name test-backend ${IMAGE_NAME_BACK}:${IMAGE_TAG}
+                    docker run -d -p 80:80 --name test-frontend ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
+                    timeout /t 10
+                    echo "Containers status:"
+                    docker ps
                     """
 
-                    // Démarrage des containers de test
+                    // Test simple
                     bat """
-                    echo "🚀 Démarrage des containers de test..."
-                    echo "Backend: port ${BACKEND_TEST_PORT}"
-                    docker run -d -p ${BACKEND_TEST_PORT}:9090 --name test-backend ${IMAGE_NAME_BACK}:${IMAGE_TAG}
-
-                    echo "Frontend: port ${FRONTEND_TEST_PORT}"
-                    docker run -d -p ${FRONTEND_TEST_PORT}:80 --name test-frontend ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
-
-                    echo "⏳ Attente du démarrage des services..."
-                    timeout /t 30
+                    echo "Testing containers..."
+                    curl -f http://localhost:9091/actuator/health || echo "Backend health check failed"
+                    curl -f http://localhost:80/ || echo "Frontend check failed"
                     """
 
-                    // Diagnostic des containers
+                    // Nettoyage
                     bat """
-                    echo "📊 État des containers:"
-                    docker ps -a
-
-                    echo "📝 Logs du backend:"
-                    docker logs test-backend || echo "Impossible de récupérer les logs du backend"
-
-                    echo "📝 Logs du frontend:"
-                    docker logs test-frontend || echo "Impossible de récupérer les logs du frontend"
-                    """
-
-                    // Tests de santé
-                    bat """
-                    echo "🔍 Tests de santé des services..."
-                    echo "Testing backend health..."
-                    curl -f --retry 3 --retry-delay 5 http://localhost:${BACKEND_TEST_PORT}/actuator/health || echo "❌ Backend health check failed"
-
-                    echo "Testing frontend accessibility..."
-                    curl -f http://localhost:${FRONTEND_TEST_PORT}/ || echo "❌ Frontend check failed"
-
-                    echo "✅ Tests d'intégration terminés"
-                    """
-                }
-            }
-            post {
-                always {
-                    echo "📋 Résumé des tests d'intégration"
-                }
-                failure {
-                    echo "❌ Les tests d'intégration ont échoué"
-                }
-            }
-        }
-
-        /******************************************************************
-         * 5. NETTOYAGE ENVIRONNEMENT DE TEST
-         *****************************************************************/
-        stage('🧹 Cleanup Test Environment') {
-            steps {
-                script {
-                    echo "🔧 Étape 5: Nettoyage de l'environnement de test"
-
-                    bat """
-                    echo "🧹 Arrêt et suppression des containers de test..."
-                    docker stop test-backend test-frontend 2>nul || echo "Aucun container à arrêter"
-                    docker rm test-backend test-frontend 2>nul || echo "Aucun container à supprimer"
-
-                    echo "🗑️ Nettoyage des images intermédiaires..."
-                    docker image prune -f 2>nul || echo "Aucune image à nettoyer"
-
-                    echo "✅ Environnement de test nettoyé"
+                    docker stop test-backend test-frontend
+                    docker rm test-backend test-frontend
+                    echo "Test completed"
                     """
                 }
             }
         }
     }
 
-    /******************************************************************
-     * POST-BUILD ACTIONS
-     *****************************************************************/
+    /********************* 🏁 POST-BUILD *********************/
     post {
         always {
-            echo "🏁 Pipeline terminé: ${currentBuild.currentResult}"
-            echo "🔗 URL du build: ${env.BUILD_URL}"
-            echo "⏰ Durée: ${currentBuild.durationString}"
+            echo "Build finished: ${currentBuild.currentResult}"
+            echo "Build URL: ${env.BUILD_URL}"
         }
         success {
-            echo "🎉 SUCCÈS! Pipeline CI/CD opérationnel!"
-            echo "📦 Images Docker publiées:"
+            echo 'SUCCESS! CI/CD Pipeline working perfectly!'
+            echo "Published images:"
             echo "   - ${IMAGE_NAME_BACK}:${IMAGE_TAG}"
             echo "   - ${IMAGE_NAME_FRONT}:${IMAGE_TAG}"
-            echo "🌐 URLs de test:"
-            echo "   - Backend: http://localhost:${BACKEND_TEST_PORT}"
-            echo "   - Frontend: http://localhost:${FRONTEND_TEST_PORT}"
         }
         failure {
-            echo "💥 Échec du pipeline - Consultez les logs pour plus de détails"
-            emailext (
-                subject: "❌ Échec du Pipeline: ${env.JOB_NAME} - Build #${env.BUILD_NUMBER}",
-                body: """
-                Le pipeline ${env.JOB_NAME} a échoué.
-
-                Détails:
-                - Build: #${env.BUILD_NUMBER}
-                - URL: ${env.BUILD_URL}
-                - Cause: Consultez les logs Jenkins
-                """,
-                to: "dev-team@company.com"
-            )
-        }
-        unstable {
-            echo "⚠️ Pipeline instable - Tests échoués"
-        }
-        aborted {
-            echo "⏹️ Pipeline annulé manuellement"
+            echo 'Pipeline failed. Check Jenkins logs for details.'
         }
     }
 }
