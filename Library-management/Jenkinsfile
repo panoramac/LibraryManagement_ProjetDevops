@@ -83,11 +83,7 @@ pipeline {
         stage('Run Containers for Test') {
             steps {
                 script {
-                    // Nettoyage des containers de test existants
-                    bat '''
-                    docker stop test-backend test-frontend 2>nul || echo No test containers to stop
-                    docker rm test-backend test-frontend 2>nul || echo No test containers to remove
-                    '''
+
 
                     // Démarrer les containers de test
                     bat """
