@@ -36,11 +36,9 @@ pipeline {
         stage('Build Docker Images') {
                     steps {
                         script {
-                            // Arrêter les containers existants pour libérer les ports
-                            bat 'docker stop library-backend library-frontend || echo "Aucun container à arrêter"'
-                            bat 'docker rm library-backend library-frontend || echo "Aucun container à supprimer"'
 
-                            // Build backend
+
+                         // Build backend
                             dir('Library-management/Back-End') {
                                 bat """
                                 echo "Building backend image..."
