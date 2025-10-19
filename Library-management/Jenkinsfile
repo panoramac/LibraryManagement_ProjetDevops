@@ -13,8 +13,7 @@ pipeline {
     }
 
     stages {
-
-        /********************* 🧱 1. BUILD MAVEN (TON STAGE D’ORIGINE) *********************/
+        /********************* 🧱 1. BUILD MAVEN *********************/
         stage('Build Project') {
             steps {
                 git branch: 'feature/pipeline-jenkins',
@@ -33,21 +32,20 @@ pipeline {
             }
         }
 
-        /********************* 🐳 2. BUILD DES IMAGES DOCKER *********************/
+        /********************* 🐳 2. BUILD DES IMAGES DOCKER CORRIGÉ *********************/
         stage('Build Docker Images') {
             steps {
                 script {
+                    // Les Dockerfiles sont dans Library-management/Back-End/ et Library-management/Front-End/
                     dir('Library-management/Back-End') {
-                        bat "docker build -t elkarkafidouaa/library-backend:v1 ."
+                        bat "docker build -t ${IMAGE_NAME_BACK}:${IMAGE_TAG} ."
                     }
                     dir('Library-management/Front-End') {
-                         bat "docker build -t elkarkafidouaa/library-frontend:v1 ."
+                        bat "docker build -t ${IMAGE_NAME_FRONT}:${IMAGE_TAG} ."
                     }
                 }
             }
         }
-
-
 
         /********************* ☁️ 3. PUSH VERS DOCKER HUB *********************/
         stage('Push Docker Images to Docker Hub') {
@@ -69,12 +67,14 @@ pipeline {
         stage('Run Containers for Test') {
             steps {
                 script {
-                    bat """
-                    docker compose -f Library-management/docker-compose.yml up -d
-                    timeout /t 10
-                    docker ps
-                    docker compose -f Library-management/docker-compose.yml down
-                    """
+                    dir('Library-management') {
+                        bat """
+                        docker compose up -d
+                        timeout /t 30
+                        docker ps
+                        docker compose down
+                        """
+                    }
                 }
             }
         }
