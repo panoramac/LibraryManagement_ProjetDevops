@@ -13,9 +13,10 @@ pipeline {
     }
 
     stages {
+        /********************* 🧱 1. BUILD MAVEN *********************/
         stage('Build Project') {
             steps {
-                git branch: 'feature/docker',
+                git branch: 'feature/docker',  // Utiliser la branche avec les Dockerfiles
                 url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
 
                 dir('Library-management/Back-End') {
@@ -26,75 +27,131 @@ pipeline {
                 success {
                     archiveArtifacts 'Library-management/Back-End/**/target/*.jar'
                     junit 'Library-management/Back-End/**/target/surefire-reports/*.xml'
-                    echo 'Build Maven successful'
+                    echo '🎉 Build Maven réussi !'
                 }
             }
         }
 
+        /********************* 🐳 2. VÉRIFICATION DU CONTEXTE DOCKER *********************/
+        stage('Verify Docker Context') {
+            steps {
+                script {
+                    dir('Library-management') {
+                        bat '''
+                        echo "=== STRUCTURE DU PROJET ==="
+                        dir
+                        echo "=== BACK-END ==="
+                        dir Back-End
+                        echo "=== FRONT-END ==="
+                        dir Front-End
+                        echo "=== DOCKERFILES ==="
+                        type Back-End\\Dockerfile || echo "Dockerfile backend manquant"
+                        type Front-End\\Dockerfile || echo "Dockerfile frontend manquant"
+                        '''
+                    }
+                }
+            }
+        }
+
+        /********************* 🐳 3. BUILD DES IMAGES DOCKER *********************/
         stage('Build Docker Images') {
             steps {
                 script {
-                    // Nettoyage des containers existants (sans caractères spéciaux)
-                    bat 'docker stop library-backend library-frontend 2>nul || echo No containers to stop'
-                    bat 'docker rm library-backend library-frontend 2>nul || echo No containers to remove'
+                    // Arrêter les containers existants pour libérer les ports
+                    bat 'docker stop library-backend library-frontend || echo "Aucun container à arrêter"'
+                    bat 'docker rm library-backend library-frontend || echo "Aucun container à supprimer"'
 
+                    // Build backend
                     dir('Library-management/Back-End') {
-                        bat "docker build -t ${IMAGE_NAME_BACK}:${IMAGE_TAG} ."
+                        bat """
+                        echo "Building backend image..."
+                        docker build -t ${IMAGE_NAME_BACK}:${IMAGE_TAG} .
+                        echo "Backend image built successfully"
+                        """
                     }
+
+                    // Build frontend
                     dir('Library-management/Front-End') {
-                        bat "docker build -t ${IMAGE_NAME_FRONT}:${IMAGE_TAG} ."
+                        bat """
+                        echo "Building frontend image..."
+                        docker build -t ${IMAGE_NAME_FRONT}:${IMAGE_TAG} .
+                        echo "Frontend image built successfully"
+                        """
                     }
+
+                    // Lister les images construites
+                    bat 'docker images | findstr "library" || echo "Aucune image library trouvée"'
                 }
             }
         }
 
+        /********************* ☁️ 4. PUSH VERS DOCKER HUB *********************/
         stage('Push Docker Images to Docker Hub') {
             steps {
                 script {
                     withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         bat """
-                        echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
+                        echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin
                         docker push ${IMAGE_NAME_BACK}:${IMAGE_TAG}
                         docker push ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
                         docker logout
+                        echo "Images pushed successfully to Docker Hub"
                         """
                     }
                 }
             }
         }
 
+        /********************* 🧪 5. TEST DES CONTAINERS *********************/
         stage('Run Containers for Test') {
             steps {
                 script {
-                    bat 'docker stop library-backend-test library-frontend-test 2>nul || echo No test containers to stop'
-                    bat 'docker rm library-backend-test library-frontend-test 2>nul || echo No test containers to remove'
+                    // Arrêter les containers existants
+                    bat 'docker stop library-backend library-frontend || echo "Aucun container à arrêter"'
+                    bat 'docker rm library-backend library-frontend || echo "Aucun container à supprimer"'
 
+                    // Démarrer les containers
                     bat """
-                    docker run -d -p 9090:9090 --name library-backend-test ${IMAGE_NAME_BACK}:${IMAGE_TAG}
-                    docker run -d -p 8080:80 --name library-frontend-test ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
+                    docker run -d -p 9090:9090 --name library-backend ${IMAGE_NAME_BACK}:${IMAGE_TAG}
+                    docker run -d -p 80:80 --name library-frontend ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
                     timeout /t 10
+                    echo "Containers status:"
                     docker ps
                     """
 
-                    // Nettoyage après test
+                    // Test de santé
                     bat """
-                    docker stop library-backend-test library-frontend-test
-                    docker rm library-backend-test library-frontend-test
+                    echo "Testing backend..."
+                        curl -f http://localhost:9090/actuator/health || echo "Backend health check failed"
+                    echo "Testing frontend..."
+                        curl -f http://localhost:80/ || echo "Frontend check failed"
+                    """
+
+                    // Arrêter les containers de test
+                    bat """
+                    docker stop library-backend library-frontend
+                    docker rm library-backend library-frontend
+                    echo "Test containers cleaned up"
                     """
                 }
             }
         }
     }
 
+    /********************* 🏁 POST-BUILD *********************/
     post {
         always {
-            echo "Build finished: ${currentBuild.currentResult}"
+            echo "Build terminé : ${currentBuild.currentResult}"
+            echo "URL du build : ${env.BUILD_URL}"
         }
         success {
-            echo 'SUCCESS! Pipeline CI/CD working perfectly!'
+            echo '✅ ✅✅ SUCCÈS TOTAL ! VOTRE PIPELINE CI/CD FONCTIONNE PARFAITEMENT ! ✅✅✅'
+            echo "📦 Images publiées :"
+            echo "   - ${IMAGE_NAME_BACK}:${IMAGE_TAG}"
+            echo "   - ${IMAGE_NAME_FRONT}:${IMAGE_TAG}"
         }
         failure {
-            echo 'Pipeline failed. Check Jenkins logs for details.'
+            echo '❌ Le pipeline a échoué. Consultez les logs Jenkins pour plus de détails.'
         }
     }
 }
