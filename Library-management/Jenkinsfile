@@ -79,53 +79,47 @@ pipeline {
             }
         }
 
+
         /********************* 🧪 4. TEST DES CONTAINERS *********************/
         stage('Run Containers for Test') {
             steps {
                 script {
+                    // Nettoyage
+                    bat '''
+                    docker stop test-backend test-frontend 2>nul || echo No containers to stop
+                    docker rm test-backend test-frontend 2>nul || echo No containers to remove
+                    '''
 
-
-                    // Démarrer les containers de test
+                    // Démarrer les containers
                     bat """
                     docker run -d -p 9091:9090 --name test-backend ${IMAGE_NAME_BACK}:${IMAGE_TAG}
-                    docker run -d -p 80:80 --name test-frontend ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
-                    timeout /t 10
+                    docker run -d -p 8080:80 --name test-frontend ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
+                    timeout /t 30
+                    """
+
+                    // Tests
+                    bat """
                     echo "Containers status:"
                     docker ps
-                    """
-
-                    // Test simple
-                    bat """
-                    echo "Testing containers..."
+                    echo "Backend logs:"
+                    docker logs test-backend
                     curl -f http://localhost:9091/actuator/health || echo "Backend health check failed"
-                    curl -f http://localhost:80/ || echo "Frontend check failed"
-                    """
-
-                    // Nettoyage
-                    bat """
-                    docker stop test-backend test-frontend
-                    docker rm test-backend test-frontend
-                    echo "Test completed"
+                    curl -f http://localhost:8080/ || echo "Frontend check failed"
                     """
                 }
             }
         }
-    }
 
-    /********************* 🏁 POST-BUILD *********************/
-    post {
-        always {
-            echo "Build finished: ${currentBuild.currentResult}"
-            echo "Build URL: ${env.BUILD_URL}"
+        /********************* 🧹 5. NETTOYAGE (Optionnel) *********************/
+        stage('Cleanup') {
+            steps {
+                script {
+                    bat '''
+                    echo "Cleaning up test containers..."
+                    docker stop test-backend test-frontend 2>nul || echo "No containers to stop"
+                    docker rm test-backend test-frontend 2>nul || echo "No containers to remove"
+                    echo "Cleanup completed"
+                    '''
+                }
+            }
         }
-        success {
-            echo 'SUCCESS! CI/CD Pipeline working perfectly!'
-            echo "Published images:"
-            echo "   - ${IMAGE_NAME_BACK}:${IMAGE_TAG}"
-            echo "   - ${IMAGE_NAME_FRONT}:${IMAGE_TAG}"
-        }
-        failure {
-            echo 'Pipeline failed. Check Jenkins logs for details.'
-        }
-    }
-}
