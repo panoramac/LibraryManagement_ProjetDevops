@@ -14,27 +14,26 @@ pipeline {
 
     stages {
 
-        stage('Checkout Source') {
+        /********************* 🧱 1. BUILD MAVEN (TON STAGE D’ORIGINE) *********************/
+        stage('Build Project') {
             steps {
                 git branch: 'feature/pipeline-jenkins',
-                    url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
-            }
-        }
+                url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
 
-        stage('Build Backend with Maven') {
-            steps {
                 dir('Library-management/Back-End') {
-                    bat 'mvn clean package -DskipTests'
+                    bat 'mvn clean compile test package -Dproject.build.sourceEncoding=ISO-8859-1'
+                }
+            }
+            post {
+                success {
+                    archiveArtifacts 'Library-management/Back-End/**/target/*.jar'
+                    junit 'Library-management/Back-End/**/target/surefire-reports/*.xml'
+                    echo '🎉 🎉🎉 FÉLICITATIONS ! PIPELINE CI/CD OPÉRATIONNEL ! 🎉🎉🎉'
                 }
             }
         }
 
-        stage('Archive Backend Jar') {
-            steps {
-                archiveArtifacts artifacts: 'Library-management/Back-End/**/target/*.jar', followSymlinks: false
-            }
-        }
-
+        /********************* 🐳 2. BUILD DES IMAGES DOCKER *********************/
         stage('Build Docker Images') {
             steps {
                 script {
@@ -46,6 +45,7 @@ pipeline {
             }
         }
 
+        /********************* ☁️ 3. PUSH VERS DOCKER HUB *********************/
         stage('Push Docker Images to Docker Hub') {
             steps {
                 script {
@@ -61,7 +61,8 @@ pipeline {
             }
         }
 
-        stage('Test with docker-compose') {
+        /********************* 🧪 4. TEST VIA DOCKER COMPOSE *********************/
+        stage('Run Containers for Test') {
             steps {
                 script {
                     bat """
@@ -75,12 +76,21 @@ pipeline {
         }
     }
 
+    /********************* 🏁 POST-BUILD *********************/
     post {
+        always {
+            echo "Build terminé : ${currentBuild.currentResult}"
+            echo "URL du build : ${env.BUILD_URL}"
+            echo "Consultez les artefacts archivés !"
+        }
         success {
-            echo "🎉 Pipeline réussi ! Images ${IMAGE_TAG} publiées sur Docker Hub."
+            echo '✅ ✅✅ SUCCÈS TOTAL ! VOTRE PIPELINE CI/CD FONCTIONNE PARFAITEMENT ! ✅✅✅'
+            echo "📦 Images publiées :"
+            echo "   - ${IMAGE_NAME_BACK}:${IMAGE_TAG}"
+            echo "   - ${IMAGE_NAME_FRONT}:${IMAGE_TAG}"
         }
         failure {
-            echo "❌ Le pipeline a échoué, consultez les logs Jenkins."
+            echo '❌ Le pipeline a échoué. Consultez les logs Jenkins pour plus de détails.'
         }
     }
 }
