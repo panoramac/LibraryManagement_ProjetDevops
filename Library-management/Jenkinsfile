@@ -57,10 +57,9 @@ pipeline {
         stage('Build Docker Images') {
             steps {
                 script {
-
                     // Arrêter les containers existants pour libérer les ports
-                    bat 'docker stop library-backend library-frontend || echo "Aucun container a arreter"'
-                    bat 'docker rm library-backend library-frontend || echo "Aucun container a supprimer"'
+                    bat 'docker stop library-backend library-frontend || echo "Aucun container à arrêter"'
+                    bat 'docker rm library-backend library-frontend || echo "Aucun container à supprimer"'
 
                     // Build backend
                     dir('Library-management/Back-End') {
@@ -81,7 +80,7 @@ pipeline {
                     }
 
                     // Lister les images construites
-                    bat 'docker images | findstr "library" || echo "Aucune image library trouvee"'
+                    bat 'docker images | findstr "library" || echo "Aucune image library trouvée"'
                 }
             }
         }
@@ -108,8 +107,8 @@ pipeline {
             steps {
                 script {
                     // Arrêter les containers existants
-                    bat 'docker stop library-backend library-frontend || echo "Aucun container a arreter"'
-                    bat 'docker rm library-backend library-frontend || echo "Aucun container a supprimer"'
+                    bat 'docker stop library-backend library-frontend || echo "Aucun container à arrêter"'
+                    bat 'docker rm library-backend library-frontend || echo "Aucun container à supprimer"'
 
                     // Démarrer les containers
                     bat """
@@ -146,13 +145,13 @@ pipeline {
             echo "URL du build : ${env.BUILD_URL}"
         }
         success {
-            echo 'SUCCÈS TOTAL ! VOTRE PIPELINE CI/CD FONCTIONNE PARFAITEMENT ! '
-            echo "📦 Images publiees :"
+            echo '✅ ✅✅ SUCCÈS TOTAL ! VOTRE PIPELINE CI/CD FONCTIONNE PARFAITEMENT ! ✅✅✅'
+            echo "📦 Images publiées :"
             echo "   - ${IMAGE_NAME_BACK}:${IMAGE_TAG}"
             echo "   - ${IMAGE_NAME_FRONT}:${IMAGE_TAG}"
         }
         failure {
-            echo '❌ Le pipeline a echoue. Consultez les logs Jenkins pour plus de details.'
+            echo '❌ Le pipeline a échoué. Consultez les logs Jenkins pour plus de détails.'
         }
     }
 }
