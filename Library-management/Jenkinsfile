@@ -37,13 +37,14 @@ pipeline {
         stage('Build Docker Images') {
             steps {
                 script {
-                    bat """
-                    docker build -t ${IMAGE_NAME_BACK}:${IMAGE_TAG} -f Library-management/Back-End/Dockerfile .
-                    docker build -t ${IMAGE_NAME_FRONT}:${IMAGE_TAG} -f Library-management/Front-End/Dockerfile .
-                    """
+                    dir('Library-management') {
+                        bat 'docker build -t elkarkafidouaa/library-backend:v1 -f Back-End/Dockerfile .'
+                        bat 'docker build -t elkarkafidouaa/library-frontend:v1 -f Front-End/Dockerfile .'
+                    }
                 }
             }
         }
+
 
         /********************* ☁️ 3. PUSH VERS DOCKER HUB *********************/
         stage('Push Docker Images to Docker Hub') {
