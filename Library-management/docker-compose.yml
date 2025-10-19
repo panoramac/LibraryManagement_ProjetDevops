@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./Back-End
+    container_name: library-backend
+    ports:
+      - "9091:9090"
+
+  frontend:
+    build: ./Front-End
+    container_name: library-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
