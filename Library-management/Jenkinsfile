@@ -1,15 +1,117 @@
 pipeline {
     agent any
+
+    tools {
+        maven 'Maven3'
+        jdk 'JDK17'
+        sonarQubeScanner 'SonarScanner'
+    }
+
+    environment {
+        // Variables d'application (modifiables)
+        APP_NAME_BACK = "library-backend"
+        APP_NAME_FRONT = "library-frontend"
+        IMAGE_TAG = "v1"
+
+        // Variables SonarCloud - À CONFIGURER par chaque utilisateur
+        SONAR_ORGANIZATION = ""                    // À définir dans Jenkins
+        SONAR_PROJECT_KEY = ""                     // À définir dans Jenkins
+    }
+
     stages {
-        stage('Test SonarCloud Config') {
+        /********************* 🔍 1. ANALYSE SONARQUBE *********************/
+        stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarCloud') {
-                    bat '''
-                        echo "✅ SonarCloud configuré avec succès!"
-                        echo "URL: %SONAR_HOST_URL%"
-                    '''
+                dir('Library-management/Back-End') {
+                    script {
+                        withSonarQubeEnv('SonarCloud') {
+                            bat """
+                            mvn clean verify sonar:sonar \
+                                -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                                -Dsonar.organization=${SONAR_ORGANIZATION} \
+                                -Dsonar.host.url=https://sonarcloud.io \
+                                -Dsonar.java.binaries=target/classes \
+                                -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                            """
+                        }
+                    }
                 }
             }
+        }
+
+        /********************* ⏳ 2. QUALITY GATE *********************/
+        stage("Quality Gate") {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        /********************* 🧱 3. BUILD & TESTS *********************/
+        stage('Build & Unit Tests') {
+            steps {
+                git branch: 'develop',
+                url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
+
+                dir('Library-management/Back-End') {
+                    bat 'mvn clean compile test package -Dproject.build.sourceEncoding=ISO-8859-1'
+                }
+            }
+            post {
+                success {
+                    archiveArtifacts 'Library-management/Back-End/**/target/*.jar'
+                    junit 'Library-management/Back-End/**/target/surefire-reports/*.xml'
+                    echo '✅ Build Maven et tests unitaires réussis'
+                }
+            }
+        }
+
+        /********************* 🐳 4. BUILD IMAGES DOCKER *********************/
+        stage('Build Docker Images') {
+            steps {
+                script {
+                    dir('Library-management/Back-End') {
+                        bat "docker build -t ${APP_NAME_BACK}:${IMAGE_TAG} ."
+                    }
+                    dir('Library-management/Front-End') {
+                        bat "docker build -t ${APP_NAME_FRONT}:${IMAGE_TAG} ."
+                    }
+                    bat 'docker images | findstr "library"'
+                }
+            }
+        }
+
+        /********************* ☁️ 5. PUSH DOCKER HUB *********************/
+        stage('Push Docker Images to Docker Hub') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'dockerhub',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )]) {
+                        bat """
+                        echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
+                        docker tag ${APP_NAME_BACK}:${IMAGE_TAG} %DOCKER_USER%/${APP_NAME_BACK}:${IMAGE_TAG}
+                        docker tag ${APP_NAME_FRONT}:${IMAGE_TAG} %DOCKER_USER%/${APP_NAME_FRONT}:${IMAGE_TAG}
+                        docker push %DOCKER_USER%/${APP_NAME_BACK}:${IMAGE_TAG}
+                        docker push %DOCKER_USER%/${APP_NAME_FRONT}:${IMAGE_TAG}
+                        docker logout
+                        echo "✅ Images poussées sur Docker Hub!"
+                        """
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "Build finished: ${currentBuild.currentResult}"
+        }
+        success {
+            echo '🎉 Pipeline CI/CD réussi!'
         }
     }
 }
