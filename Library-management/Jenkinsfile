@@ -4,18 +4,17 @@ pipeline {
     tools {
         maven 'Maven3'
         jdk 'JDK17'
-
     }
 
     environment {
-        // Variables d'application (modifiables)
+        // Variables d'application
         APP_NAME_BACK = "library-backend"
         APP_NAME_FRONT = "library-frontend"
         IMAGE_TAG = "v1"
 
-        // Variables SonarCloud - À CONFIGURER par chaque utilisateur
-        SONAR_ORGANIZATION = ""                    // À définir dans Jenkins
-        SONAR_PROJECT_KEY = ""                     // À définir dans Jenkins
+        // Variables SonarCloud récupérées depuis Jenkins
+        SONAR_ORGANIZATION = "${env.SONAR_ORGANIZATION}"
+        SONAR_PROJECT_KEY = "${env.SONAR_PROJECT_KEY}"
     }
 
     stages {
@@ -30,8 +29,7 @@ pipeline {
                                 -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
                                 -Dsonar.organization=${SONAR_ORGANIZATION} \
                                 -Dsonar.host.url=https://sonarcloud.io \
-                                -Dsonar.java.binaries=target/classes \
-                                -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                                -Dsonar.java.binaries=target/classes
                             """
                         }
                     }
