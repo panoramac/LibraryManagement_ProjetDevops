@@ -4,7 +4,8 @@ pipeline {
     tools {
         maven 'Maven3'
         jdk 'JDK17'
-        sonarQubeScanner 'SonarScanner'
+        // ✅ CORRECTION : Utiliser le bon type pour SonarQube
+        sonarRunner 'SonarScanner'
     }
 
     environment {
