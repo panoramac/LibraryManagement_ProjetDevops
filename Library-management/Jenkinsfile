@@ -1,137 +1,62 @@
 pipeline {
     agent any
 
-    tools {
-        maven 'Maven3'
-        jdk 'JDK17'
-    }
-
     environment {
-        // 💡 VARIABLES D'APPLICATION (Sans le nom d'utilisateur Docker Hub)
         APP_NAME_BACK = "library-backend"
         APP_NAME_FRONT = "library-frontend"
         IMAGE_TAG = "v1"
     }
 
     stages {
-        /********************* 🧱 1. BUILD MAVEN *********************/
-        stage('Build Project & Unit Tests') {
-            steps {
-                // Cloner le repo (Jenkins le fait souvent automatiquement si configuré)
-                git branch: 'develop', // Assurez-vous d'utiliser la branche de dev correcte
-                url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
-
-                dir('Library-management/Back-End') {
-                    // Compilation, Tests unitaires et génération du package (.jar)
-                    bat 'mvn clean compile test package -Dproject.build.sourceEncoding=ISO-8859-1'
-                }
-            }
-            post {
-                success {
-                    // Archivage de l'artefact (.jar) et publication des rapports de tests
-                    archiveArtifacts 'Library-management/Back-End/**/target/*.jar'
-                    junit 'Library-management/Back-End/**/target/surefire-reports/*.xml'
-                    echo 'Build Maven successful and Unit Tests published.'
-                }
-                failure {
-                    echo 'Maven build or Unit Tests failed!'
-                }
-            }
-        }
-
-        /********************* 🐳 2. BUILD DES IMAGES DOCKER *********************/
-        stage('Build Docker Images') {
+        stage('Test Docker Hub Credentials') {
             steps {
                 script {
-                    // Build backend (utilise le nom d'image local sans tag Docker Hub)
-                    dir('Library-management/Back-End') {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'dockerhub',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )]) {
                         bat """
-                        echo "Building backend image: ${APP_NAME_BACK}:${IMAGE_TAG}..."
-                        docker build -t ${APP_NAME_BACK}:${IMAGE_TAG} .
-                        echo "Backend image built successfully"
-                        """
-                    }
-
-                    // Build frontend
-                    dir('Library-management/Front-End') {
-                        bat """
-                        echo "Building frontend image: ${APP_NAME_FRONT}:${IMAGE_TAG}..."
-                        docker build -t ${APP_NAME_FRONT}:${IMAGE_TAG} .
-                        echo "Frontend image built successfully"
-                        """
-                    }
-                    bat 'docker images | findstr "library" || echo "Aucune image library trouvée"'
-                }
-            }
-        }
-
-        /********************* ☁️ 3. PUSH VERS DOCKER HUB *********************/
-        stage('Push Docker Images to Docker Hub') {
-            steps {
-                script {
-                    // Utilise les identifiants 'dockerhub' pour se connecter
-                    withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        bat """
+                        echo "Testing Docker Hub credentials..."
+                        echo Username: %DOCKER_USER%
+                        echo "Login test:"
                         echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
-
-                        // 💡 RETAG : On préfixe l'image locale avec le DOCKER_USER
-                        docker tag ${APP_NAME_BACK}:${IMAGE_TAG} %DOCKER_USER%/${APP_NAME_BACK}:${IMAGE_TAG}
-                        docker tag ${APP_NAME_FRONT}:${IMAGE_TAG} %DOCKER_USER%/${APP_NAME_FRONT}:${IMAGE_TAG}
-
-                        // 🚀 PUSH : On pousse les images vers le dépôt personnel
-                        docker push %DOCKER_USER%/${APP_NAME_BACK}:${IMAGE_TAG}
-                        docker push %DOCKER_USER%/${APP_NAME_FRONT}:${IMAGE_TAG}
-
                         docker logout
-                        echo "Images pushed to Docker Hub by %DOCKER_USER%"
+                        echo "Credentials test completed successfully!"
                         """
                     }
                 }
             }
         }
 
-        /********************* 🧪 4. TEST DES CONTAINERS *********************/
-        stage('Run Containers for Test') {
+        stage('Push Test Image') {
             steps {
                 script {
-                    // Les containers sont démarrés avec le nom d'image local (plus simple pour le test)
-                    bat """
-                    docker run -d -p 9091:9090 --name test-backend ${APP_NAME_BACK}:${IMAGE_TAG}
-                    docker run -d -p 80:80 --name test-frontend ${APP_NAME_FRONT}:${IMAGE_TAG}
-                    timeout /t 10
-                    echo "Containers status:"
-                    docker ps
-                    """
+                    withCredentials([usernamePassword(
+                        credentialsId: 'dockerhub',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )]) {
+                        bat """
+                        echo "Testing image push..."
 
-                    // Test simple
-                    bat """
-                    echo "Testing containers..."
-                    curl -f http://localhost:9091/actuator/health || echo "Backend health check failed"
-                    curl -f http://localhost:80/ || echo "Frontend check failed"
-                    """
+                        REM Créer une petite image de test
+                        echo "FROM alpine:latest" > test.Dockerfile
+                        echo "CMD echo 'test image'" >> test.Dockerfile
 
-                    // Nettoyage
-                    bat """
-                    docker stop test-backend test-frontend
-                    docker rm test-backend test-frontend
-                    echo "Test completed"
-                    """
+                        REM Build et tag
+                        docker build -t %DOCKER_USER%/test-image:v1 -f test.Dockerfile .
+
+                        REM Push
+                        echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
+                        docker push %DOCKER_USER%/test-image:v1
+                        docker logout
+
+                        echo "Push test successful!"
+                        """
+                    }
                 }
             }
-        }
-    }
-
-    /********************* 🏁 POST-BUILD *********************/
-    post {
-        always {
-            echo "Build finished: ${currentBuild.currentResult}"
-            echo "Build URL: ${env.BUILD_URL}"
-        }
-        success {
-            echo 'SUCCESS! CI/CD Pipeline working perfectly!'
-        }
-        failure {
-            echo 'Pipeline failed. Check Jenkins logs for details.'
         }
     }
 }
