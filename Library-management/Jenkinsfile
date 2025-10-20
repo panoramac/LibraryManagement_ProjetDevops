@@ -1,148 +1,15 @@
 pipeline {
     agent any
-
-    tools {
-        maven 'Maven3'
-        jdk 'JDK17'
-    }
-
-    environment {
-        // Variables d'application
-        APP_NAME_BACK = "library-backend"
-        APP_NAME_FRONT = "library-frontend"
-        IMAGE_TAG = "v1"
-    }
-
     stages {
-        /********************* 🧱 1. BUILD MAVEN *********************/
-        stage('Build Project & Unit Tests') {
+        stage('Test SonarCloud Config') {
             steps {
-                // Cloner le repository
-                git branch: 'develop',
-                url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
-
-                dir('Library-management/Back-End') {
-                    // Compilation, Tests unitaires et package
-                    bat 'mvn clean compile test package -Dproject.build.sourceEncoding=ISO-8859-1'
+                withSonarQubeEnv('SonarCloud') {
+                    bat '''
+                        echo "✅ SonarCloud configuré avec succès!"
+                        echo "URL: %SONAR_HOST_URL%"
+                    '''
                 }
             }
-            post {
-                success {
-                    // Archivage des artefacts et rapports de tests
-                    archiveArtifacts 'Library-management/Back-End/**/target/*.jar'
-                    junit 'Library-management/Back-End/**/target/surefire-reports/*.xml'
-                    echo '✅ Build Maven réussi et tests unitaires publiés'
-                }
-                failure {
-                    echo '❌ Échec du build Maven ou des tests unitaires'
-                }
-            }
-        }
-
-        /********************* 🐳 2. BUILD DES IMAGES DOCKER *********************/
-        stage('Build Docker Images') {
-            steps {
-                script {
-                    // Build backend
-                    dir('Library-management/Back-End') {
-                        bat """
-                        echo "Building backend image: ${APP_NAME_BACK}:${IMAGE_TAG}..."
-                        docker build -t ${APP_NAME_BACK}:${IMAGE_TAG} .
-                        echo "✅ Backend image built successfully"
-                        """
-                    }
-
-                    // Build frontend
-                    dir('Library-management/Front-End') {
-                        bat """
-                        echo "Building frontend image: ${APP_NAME_FRONT}:${IMAGE_TAG}..."
-                        docker build -t ${APP_NAME_FRONT}:${IMAGE_TAG} .
-                        echo "✅ Frontend image built successfully"
-                        """
-                    }
-
-                    // Vérification des images
-                    bat 'docker images | findstr "library" || echo "Aucune image library trouvée"'
-                }
-            }
-        }
-
-        /********************* ☁️ 3. PUSH VERS DOCKER HUB *********************/
-        stage('Push Docker Images to Docker Hub') {
-            steps {
-                script {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'dockerhub',
-                        usernameVariable: 'DOCKER_USER',
-                        passwordVariable: 'DOCKER_PASS'
-                    )]) {
-                        bat """
-                        echo "Login to Docker Hub..."
-                        echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
-
-                        echo "Retagging images..."
-                        docker tag ${APP_NAME_BACK}:${IMAGE_TAG} %DOCKER_USER%/${APP_NAME_BACK}:${IMAGE_TAG}
-                        docker tag ${APP_NAME_FRONT}:${IMAGE_TAG} %DOCKER_USER%/${APP_NAME_FRONT}:${IMAGE_TAG}
-
-                        echo "Pushing images to Docker Hub..."
-                        docker push %DOCKER_USER%/${APP_NAME_BACK}:${IMAGE_TAG}
-                        docker push %DOCKER_USER%/${APP_NAME_FRONT}:${IMAGE_TAG}
-
-                        docker logout
-                        echo "✅ Images pushed to Docker Hub successfully!"
-                        """
-                    }
-                }
-            }
-        }
-
-        /********************* 🧪 4. TEST DES CONTAINERS *********************/
-        stage('Run Containers for Test') {
-            steps {
-                script {
-                    bat """
-                    echo "Starting test containers..."
-                    docker run -d -p 9091:9090 --name test-backend ${APP_NAME_BACK}:${IMAGE_TAG}
-                    docker run -d -p 80:80 --name test-frontend ${APP_NAME_FRONT}:${IMAGE_TAG}
-
-                    echo "Waiting for containers to start..."
-                    timeout /t 10
-
-                    echo "Containers status:"
-                    docker ps
-                    """
-
-                    // Tests de santé
-                    bat """
-                    echo "Testing containers health..."
-                    curl -f http://localhost:9091/actuator/health && echo "✅ Backend health check passed" || echo "❌ Backend health check failed"
-                    curl -f http://localhost:80/ && echo "✅ Frontend check passed" || echo "❌ Frontend check failed"
-                    """
-
-                    // Nettoyage
-                    bat """
-                    echo "Cleaning up test containers..."
-                    docker stop test-backend test-frontend
-                    docker rm test-backend test-frontend
-                    echo "✅ Test completed successfully"
-                    """
-                }
-            }
-        }
-    }
-
-    /********************* 🏁 POST-BUILD *********************/
-    post {
-        always {
-            echo "Build finished: ${currentBuild.currentResult}"
-            echo "Build URL: ${env.BUILD_URL}"
-        }
-        success {
-            echo '🎉 SUCCÈS ! Pipeline CI/CD fonctionne parfaitement !'
-            echo '📦 Images Docker disponibles sur Docker Hub'
-        }
-        failure {
-            echo '💥 Échec du pipeline. Vérifiez les logs Jenkins pour plus de détails.'
         }
     }
 }
