@@ -1,60 +1,14 @@
 pipeline {
     agent any
-
-    environment {
-        APP_NAME_BACK = "library-backend"
-        APP_NAME_FRONT = "library-frontend"
-        IMAGE_TAG = "v1"
-    }
-
     stages {
-        stage('Test Docker Hub Credentials') {
+        stage('Test') {
             steps {
-                script {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'dockerhub',
-                        usernameVariable: 'DOCKER_USER',
-                        passwordVariable: 'DOCKER_PASS'
-                    )]) {
-                        bat """
-                        echo "Testing Docker Hub credentials..."
-                        echo Username: %DOCKER_USER%
-                        echo "Login test:"
-                        echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
-                        docker logout
-                        echo "Credentials test completed successfully!"
-                        """
-                    }
-                }
-            }
-        }
-
-        stage('Push Test Image') {
-            steps {
-                script {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'dockerhub',
-                        usernameVariable: 'DOCKER_USER',
-                        passwordVariable: 'DOCKER_PASS'
-                    )]) {
-                        bat """
-                        echo "Testing image push..."
-
-                        REM Créer une petite image de test
-                        echo "FROM alpine:latest" > test.Dockerfile
-                        echo "CMD echo 'test image'" >> test.Dockerfile
-
-                        REM Build et tag
-                        docker build -t %DOCKER_USER%/test-image:v1 -f test.Dockerfile .
-
-                        REM Push
-                        echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
-                        docker push %DOCKER_USER%/test-image:v1
-                        docker logout
-
-                        echo "Push test successful!"
-                        """
-                    }
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub',
+                    usernameVariable: 'USER',
+                    passwordVariable: 'PASS'
+                )]) {
+                    bat 'echo "SUCCÈS! User: %USER%"'
                 }
             }
         }
