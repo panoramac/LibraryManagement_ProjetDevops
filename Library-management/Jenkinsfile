@@ -101,12 +101,7 @@ pipeline {
                     curl -f http://localhost:80/ || echo "Frontend check failed"
                     """
 
-                    // Nettoyage
-                    bat """
-                    // docker stop test-backend test-frontend
-                    // docker rm test-backend test-frontend
-                    echo "Test completed"
-                    """
+                    
                 }
             }
         }
