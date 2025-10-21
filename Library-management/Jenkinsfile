@@ -13,11 +13,12 @@ pipeline {
     }
 
     stages {
+
         /********************* 🧱 1. BUILD MAVEN *********************/
         stage('Build Project') {
             steps {
                 git branch: 'feature/docker',
-                url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
+                    url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
 
                 dir('Library-management/Back-End') {
                     bat 'mvn clean compile test package -Dproject.build.sourceEncoding=ISO-8859-1'
@@ -25,40 +26,38 @@ pipeline {
             }
             post {
                 success {
-                    archiveArtifacts 'Library-management/Back-End/**/target/*.jar'
+                    archiveArtifacts artifacts: 'Library-management/Back-End/**/target/*.jar', fingerprint: true
                     junit 'Library-management/Back-End/**/target/surefire-reports/*.xml'
-                    echo 'Build Maven successful'
+                    echo '✅ Build Maven successful'
                 }
             }
         }
 
         /********************* 🐳 2. BUILD DES IMAGES DOCKER *********************/
         stage('Build Docker Images') {
-                    steps {
-                        script {
+            steps {
+                script {
+                    // Build backend
+                    dir('Library-management/Back-End') {
+                        bat """
+                        echo "Building backend image..."
+                        docker build -t ${IMAGE_NAME_BACK}:${IMAGE_TAG} .
+                        echo "✅ Backend image built successfully"
+                        """
+                    }
 
+                    // Build frontend
+                    dir('Library-management/Front-End') {
+                        bat """
+                        echo "Building frontend image..."
+                        docker build -t ${IMAGE_NAME_FRONT}:${IMAGE_TAG} .
+                        echo "✅ Frontend image built successfully"
+                        """
+                    }
 
-                         // Build backend
-                            dir('Library-management/Back-End') {
-                                bat """
-                                echo "Building backend image..."
-                                docker build -t ${IMAGE_NAME_BACK}:${IMAGE_TAG} .
-                                echo "Backend image built successfully"
-                                """
-                            }
-
-                            // Build frontend
-                            dir('Library-management/Front-End') {
-                                bat """
-                                echo "Building frontend image..."
-                                docker build -t ${IMAGE_NAME_FRONT}:${IMAGE_TAG} .
-                                echo "Frontend image built successfully"
-                                """
-                            }
-
-                            // Lister les images construites
-                            bat 'docker images | findstr "library" || echo "Aucune image library trouvée"'
-                        }
+                    // Lister les images construites
+                    bat 'docker images | findstr "library" || echo "⚠️ Aucune image trouvée"'
+                }
             }
         }
 
@@ -72,17 +71,17 @@ pipeline {
                         docker push ${IMAGE_NAME_BACK}:${IMAGE_TAG}
                         docker push ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
                         docker logout
-                        echo "Images pushed to Docker Hub"
+                        echo "✅ Images pushed to Docker Hub"
                         """
                     }
                 }
             }
         }
 
+        /********************* 🧪 4. TEST AVEC CONTENEURS *********************/
         stage('Run Containers for Test') {
             steps {
                 script {
-                    // Nettoyage et démarrage des containers
                     bat """
                     echo "Cleaning old containers..."
                     docker rm -f test-backend || echo "No backend container to remove"
@@ -94,20 +93,33 @@ pipeline {
                     docker run -d --name test-backend --network app-network -p 9091:9090 ${IMAGE_NAME_BACK}:${IMAGE_TAG}
                     docker run -d --name test-frontend --network app-network -p 80:80 ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
 
-                    timeout /t 10
+                    echo "Waiting 10 seconds for containers to start..."
+                    timeout /t 10 >nul
+
                     echo "Containers status:"
                     docker ps
                     """
 
-                    // Test simple (health check)
+                    // Health checks
                     bat """
-                    echo "Testing containers..."
-                    curl -f http://localhost:9091/actuator/health || exit /b 1
-                    curl -f http://localhost:80/ || exit /b 1
+                    echo "Testing containers health..."
+                    curl -f http://localhost:9091/actuator/health || (echo "❌ Backend failed!" & exit /b 1)
+                    curl -f http://localhost:80/ || (echo "❌ Frontend failed!" & exit /b 1)
+                    echo "✅ Containers are running and reachable!"
+                    """
+                }
+            }
+            post {
+                always {
+                    bat """
+                    echo "🧹 Cleaning up test containers..."
+                    docker rm -f test-backend || echo "Already removed"
+                    docker rm -f test-frontend || echo "Already removed"
                     """
                 }
             }
         }
+    }
 
     /********************* 🏁 POST-BUILD *********************/
     post {
@@ -116,13 +128,13 @@ pipeline {
             echo "Build URL: ${env.BUILD_URL}"
         }
         success {
-            echo 'SUCCESS! CI/CD Pipeline working perfectly!'
+            echo '✅ SUCCESS! CI/CD Pipeline working perfectly!'
             echo "Published images:"
             echo "   - ${IMAGE_NAME_BACK}:${IMAGE_TAG}"
             echo "   - ${IMAGE_NAME_FRONT}:${IMAGE_TAG}"
         }
         failure {
-            echo 'Pipeline failed. Check Jenkins logs for details.'
+            echo '❌ Pipeline failed. Check Jenkins logs for details.'
         }
     }
 }
