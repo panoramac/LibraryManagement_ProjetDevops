@@ -76,9 +76,9 @@ pipeline {
                 echo '🚀 Applying Kubernetes manifests...'
 
                 // Si tes fichiers YAML sont à la racine du repo :
-                bat 'kubectl apply -f ../deployment.yaml'
-                bat 'kubectl apply -f ../service.yaml'
-                bat 'kubectl apply -f ../ingress.yaml'
+                bat 'kubectl apply -f ./Library-management/deployment.yaml'
+                bat 'kubectl apply -f ./Library-management/service.yaml'
+                bat 'kubectl apply -f ./Library-management/ingress.yaml'
 
                 echo "⏳ Waiting for pods to be ready..."
                 bat 'kubectl rollout status deployment/backend-deployment'
