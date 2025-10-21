@@ -75,7 +75,7 @@ pipeline {
             steps {
                 script {
                     echo "Applying Kubernetes manifests..."
-                    dir('Library-management/k8s') {
+                    dir('Library-management') {
                         bat """
                         kubectl apply -f deployment.yaml
                         kubectl apply -f service.yaml
