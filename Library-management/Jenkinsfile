@@ -102,7 +102,7 @@ pipeline {
                     // Health checks
                     bat """
                     echo "Testing containers health..."
-                    curl -f http://localhost:9091/|| (echo "❌ Backend failed!" & exit /b 1)
+                    curl -f http://localhost:9090/livres|| (echo "❌ Backend failed!" & exit /b 1)
                     curl -f http://localhost:80/ || (echo "❌ Frontend failed!" & exit /b 1)
                     echo "✅ Containers are running and reachable!"
                     """
