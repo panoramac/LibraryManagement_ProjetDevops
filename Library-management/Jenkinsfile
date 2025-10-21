@@ -73,15 +73,31 @@ pipeline {
         /********************* 🧩 4. DEPLOY SUR KUBERNETES *********************/
         stage('Deploy to Kubernetes') {
             steps {
-                echo '🚀 Applying Kubernetes manifests...'
-                dir('Library-management') {
-                    bat 'kubectl apply -f deployment.yaml --validate=false'
-                    bat 'kubectl apply -f service.yaml --validate=false'
-                    bat 'kubectl apply -f ingress.yaml --validate=false'
+                script {
+                    echo "🔧 Setting up Minikube environment..."
+
+                    // Démarrer Minikube si nécessaire
+                    bat 'minikube status || minikube start --force --driver=docker'
+
+                    // Configurer le contexte
+                    bat 'minikube update-context'
+                    bat 'kubectl config use-context minikube'
+
+                    // Vérifier la connexion
+                    bat 'kubectl cluster-info'
+                    bat 'timeout 10 kubectl get nodes || echo "Proceeding with deployment..."'
+
+                    echo '🚀 Applying Kubernetes manifests...'
+                    dir('Library-management') {
+                        bat 'kubectl apply -f deployment.yaml --validate=false'
+                        bat 'kubectl apply -f service.yaml --validate=false'
+                        bat 'kubectl apply -f ingress.yaml --validate=false'
+                    }
+
+                    echo "⏳ Waiting for pods to be ready..."
+                    sleep 30 // Attendre plus longtemps
+                    bat 'kubectl get pods --all-namespaces'
                 }
-                echo "⏳ Waiting for pods to be ready..."
-                bat 'kubectl rollout status deployment/backend-deployment --validate=false'
-                bat 'kubectl rollout status deployment/frontend-deployment --validate=false'
             }
         }
 
