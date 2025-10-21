@@ -87,8 +87,12 @@ pipeline {
 
                     // Démarrer les containers de test
                     bat """
-                    docker run -d -p 9091:9090 --name test-backend ${IMAGE_NAME_BACK}:${IMAGE_TAG}
-                    docker run -d -p 80:80 --name test-frontend ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
+                    docker network create app-network || echo "network already exists"
+
+                    docker run -d --name test-backend --network app-network -p 9091:9090 ${IMAGE_NAME_BACK}:${IMAGE_TAG}
+
+                    docker run -d --name test-frontend --network app-network -p 80:80 ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
+
                     timeout /t 10
                     echo "Containers status:"
                     docker ps
@@ -101,12 +105,7 @@ pipeline {
                     curl -f http://localhost:80/ || echo "Frontend check failed"
                     """
 
-                    // Nettoyage
-                    bat """
-                    docker stop test-backend test-frontend
-                    docker rm test-backend test-frontend
-                    echo "Test completed"
-                    """
+
                 }
             }
         }

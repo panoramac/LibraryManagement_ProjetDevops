@@ -1,7 +1,7 @@
 window.onload = fetchUsers;
 
 function fetchUsers() {
-    fetch('http://localhost:9091/livres')
+    fetch('http://backend:9090/livres')
         .then(response => {
             if (!response.ok) {
                 throw new Error('Erreur réseau');
@@ -54,7 +54,7 @@ function fetchUsers() {
 
 function deleteUser(id) {
     if (confirm('Confirmer la suppression de ce livre ?')) {
-        fetch(`http://localhost:9091/livre/${id}`, {
+        fetch(`http://backend:9090/livre/${id}`, {
             method: 'DELETE'
         })
             .then(response => {
@@ -91,7 +91,7 @@ function updateUser() {
         prix: parseFloat(document.getElementById('editUserPrix').value)
     };
 
-    fetch(`http://localhost:9091/livre/${id}`, {
+    fetch(`http://backend:9090/livre/${id}`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json'
