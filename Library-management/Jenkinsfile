@@ -7,64 +7,38 @@ pipeline {
     }
 
     environment {
-        // Variables d'application
         APP_NAME_BACK = "library-backend"
         APP_NAME_FRONT = "library-frontend"
         IMAGE_TAG = "v1"
-
-        // Variables SonarCloud - DÉFINIES DIRECTEMENT
         SONAR_ORGANIZATION = "panoramac"
         SONAR_PROJECT_KEY = "panoramac_LibraryManagement_ProjetDevops"
     }
 
     stages {
-        /********************* 🔍 1. MISE À JOUR DU POM.XML *********************/
-        stage('Update POM with Sonar Properties') {
-            steps {
-                dir('Library-management/Back-End') {
-                    script {
-                        // Vérifier si le POM a déjà la configuration Sonar
-                        bat """
-                        echo "📄 Vérification du fichier POM.xml..."
-                        findstr "sonar.organization" pom.xml || (
-                            echo "⚠️  Configuration Sonar manquante dans POM, utilisation des paramètres en ligne de commande"
-                        )
-                        """
-                    }
-                }
-            }
-        }
-
-        /********************* 🔍 2. ANALYSE SONARCLOUD AVEC NOUVEAU TOKEN *********************/
+        /********************* 🔍 1. ANALYSE SONARCLOUD AVEC withSonarQubeEnv *********************/
         stage('SonarCloud Analysis') {
             steps {
                 dir('Library-management/Back-End') {
                     script {
-                        // ✅ UTILISATION DU NOUVEAU TOKEN
-                        withCredentials([string(credentialsId: 'sonarcloud-token', variable: 'SONAR_TOKEN')]) {
-                            bat """
-                            echo "🚀 Démarrage analyse SonarCloud..."
-                            echo "Organisation: ${SONAR_ORGANIZATION}"
-                            echo "Project Key: ${SONAR_PROJECT_KEY}"
-                            echo "Token: ${SONAR_TOKEN}"
-
-                            # Commande EXACTE recommandée par SonarCloud
-                            mvn verify sonar:sonar \
-                                -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                                -Dsonar.organization=${SONAR_ORGANIZATION} \
-                                -Dsonar.host.url=https://sonarcloud.io \
-                                -Dsonar.login=${SONAR_TOKEN} \
-                                -Dsonar.sources=src/main/java \
-                                -Dsonar.java.binaries=target/classes \
-                                -Dsonar.sourceEncoding=UTF-8
-                            """
+                        // ✅ UTILISER withSonarQubeEnv POUR QUE waitForQualityGate FONCTIONNE
+                        withSonarQubeEnv('SonarCloud') {
+                            withCredentials([string(credentialsId: 'sonarcloud-token', variable: 'SONAR_TOKEN')]) {
+                                bat """
+                                echo "🚀 Démarrage analyse SonarCloud..."
+                                mvn verify sonar:sonar \
+                                    -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                                    -Dsonar.organization=${SONAR_ORGANIZATION} \
+                                    -Dsonar.host.url=https://sonarcloud.io \
+                                    -Dsonar.login=${SONAR_TOKEN}
+                                """
+                            }
                         }
                     }
                 }
             }
         }
 
-        /********************* ⏳ 3. QUALITY GATE *********************/
+        /********************* ⏳ 2. QUALITY GATE (MAINTENANT ÇA FONCTIONNERA) *********************/
         stage("Quality Gate") {
             steps {
                 timeout(time: 5, unit: 'MINUTES') {
@@ -73,7 +47,7 @@ pipeline {
             }
         }
 
-        /********************* 🧱 4. BUILD & TESTS *********************/
+        /********************* 🧱 3. BUILD & TESTS *********************/
         stage('Build & Unit Tests') {
             steps {
                 git branch: 'develop',
@@ -87,12 +61,40 @@ pipeline {
                 success {
                     archiveArtifacts 'Library-management/Back-End/**/target/*.jar'
                     junit 'Library-management/Back-End/**/target/surefire-reports/*.xml'
-                    echo '✅ Build Maven et tests unitaires réussis'
+                    echo '✅ Build Maven réussi'
                 }
             }
         }
 
-        // ... [Les autres stages Docker restent IDENTIQUES]
+        /********************* 🐳 4. DOCKER BUILD & PUSH *********************/
+        stage('Docker Build & Push') {
+            steps {
+                script {
+                    dir('Library-management/Back-End') {
+                        bat "docker build -t ${APP_NAME_BACK}:${IMAGE_TAG} ."
+                    }
+                    dir('Library-management/Front-End') {
+                        bat "docker build -t ${APP_NAME_FRONT}:${IMAGE_TAG} ."
+                    }
+
+                    withCredentials([usernamePassword(
+                        credentialsId: 'dockerhub',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )]) {
+                        bat """
+                        echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
+                        docker tag ${APP_NAME_BACK}:${IMAGE_TAG} %DOCKER_USER%/${APP_NAME_BACK}:${IMAGE_TAG}
+                        docker tag ${APP_NAME_FRONT}:${IMAGE_TAG} %DOCKER_USER%/${APP_NAME_FRONT}:${IMAGE_TAG}
+                        docker push %DOCKER_USER%/${APP_NAME_BACK}:${IMAGE_TAG}
+                        docker push %DOCKER_USER%/${APP_NAME_FRONT}:${IMAGE_TAG}
+                        docker logout
+                        echo "✅ Images Docker Hub poussées!"
+                        """
+                    }
+                }
+            }
+        }
     }
 
     post {
