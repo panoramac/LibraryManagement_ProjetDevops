@@ -146,7 +146,7 @@ pipeline {
             echo "📊 Consultez le rapport SonarCloud : https://sonarcloud.io/project/overview?id=${SONAR_PROJECT_KEY}"
             echo '🔧 Actions recommandées :'
             echo '   - Corriger les bugs critiques'
-            '   - Améliorer la couverture de tests'
+            echo '   - Améliorer la couverture de tests'
             echo '   - Réduire la dette technique'
         }
     }
