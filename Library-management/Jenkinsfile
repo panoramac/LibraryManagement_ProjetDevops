@@ -17,7 +17,7 @@ pipeline {
         /********************* 🧱 1. BUILD MAVEN *********************/
         stage('Build Project') {
             steps {
-                git branch: 'feature/docker',
+                git branch: 'feature/kubernetes',
                     url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
 
                 dir('Library-management/Back-End') {
