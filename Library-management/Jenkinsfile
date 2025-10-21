@@ -28,7 +28,7 @@ pipeline {
                 success {
                     archiveArtifacts 'Library-management/Back-End/**/target/*.jar'
                     junit 'Library-management/Back-End/**/target/surefire-reports/*.xml'
-                    echo 'Build Maven successful'
+                    echo '✅ Build Maven successful'
                 }
             }
         }
@@ -73,17 +73,16 @@ pipeline {
         /********************* 🧩 4. DEPLOY SUR KUBERNETES *********************/
         stage('Deploy to Kubernetes') {
             steps {
-                script {
-                    steps {
-                            echo 'Applying Kubernetes manifests...'
-                            bat 'kubectl apply -f deployment.yaml'
-                            bat 'kubectl apply -f service.yaml'
-                            bat 'kubectl apply -f ingress.yaml'
-                        }
-                    echo "Waiting for pods to be ready..."
-                    bat 'kubectl rollout status deployment/backend-deployment'
-                    bat 'kubectl rollout status deployment/frontend-deployment'
-                }
+                echo '🚀 Applying Kubernetes manifests...'
+
+                // Si tes fichiers YAML sont à la racine du repo :
+                bat 'kubectl apply -f ../deployment.yaml'
+                bat 'kubectl apply -f ../service.yaml'
+                bat 'kubectl apply -f ../ingress.yaml'
+
+                echo "⏳ Waiting for pods to be ready..."
+                bat 'kubectl rollout status deployment/backend-deployment'
+                bat 'kubectl rollout status deployment/frontend-deployment'
             }
         }
 
@@ -91,8 +90,7 @@ pipeline {
         stage('Verify Ingress Access') {
             steps {
                 script {
-                    echo "Testing application access via Ingress..."
-                    // Récupère l’IP de Minikube
+                    echo "🌍 Testing application access via Ingress..."
                     bat """
                     for /f "tokens=* USEBACKQ" %%i in (`minikube ip`) do set MINIKUBE_IP=%%i
                     echo "Minikube IP is %MINIKUBE_IP%"
