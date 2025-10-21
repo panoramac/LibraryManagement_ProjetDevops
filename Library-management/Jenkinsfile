@@ -18,7 +18,7 @@ pipeline {
         stage('Build Project') {
             steps {
                 git branch: 'feature/docker',
-                url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
+                    url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
 
                 dir('Library-management/Back-End') {
                     bat 'mvn clean compile test package -Dproject.build.sourceEncoding=ISO-8859-1'
@@ -75,10 +75,12 @@ pipeline {
             steps {
                 echo '🚀 Applying Kubernetes manifests...'
 
-                // Si tes fichiers YAML sont à la racine du repo :
-                bat 'kubectl apply -f Library-management/deployment.yaml'
-                bat 'kubectl apply -f Library-management/service.yaml'
-                bat 'kubectl apply -f Library-management/ingress.yaml'
+                // Se placer dans le bon dossier contenant les fichiers YAML
+                dir('Library-management') {
+                    bat 'kubectl apply -f deployment.yaml'
+                    bat 'kubectl apply -f service.yaml'
+                    bat 'kubectl apply -f ingress.yaml'
+                }
 
                 echo "⏳ Waiting for pods to be ready..."
                 bat 'kubectl rollout status deployment/backend-deployment'
