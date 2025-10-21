@@ -18,7 +18,7 @@ pipeline {
         stage('Build Project') {
             steps {
                 git branch: 'feature/docker',
-                    url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
+                url: 'https://github.com/panoramac/LibraryManagement_ProjetDevops.git'
 
                 dir('Library-management/Back-End') {
                     bat 'mvn clean compile test package -Dproject.build.sourceEncoding=ISO-8859-1'
@@ -26,9 +26,9 @@ pipeline {
             }
             post {
                 success {
-                    archiveArtifacts artifacts: 'Library-management/Back-End/**/target/*.jar', fingerprint: true
+                    archiveArtifacts 'Library-management/Back-End/**/target/*.jar'
                     junit 'Library-management/Back-End/**/target/surefire-reports/*.xml'
-                    echo '✅ Build Maven successful'
+                    echo 'Build Maven successful'
                 }
             }
         }
@@ -37,26 +37,19 @@ pipeline {
         stage('Build Docker Images') {
             steps {
                 script {
-                    // Build backend
                     dir('Library-management/Back-End') {
                         bat """
                         echo "Building backend image..."
                         docker build -t ${IMAGE_NAME_BACK}:${IMAGE_TAG} .
-                        echo "✅ Backend image built successfully"
                         """
                     }
-
-                    // Build frontend
                     dir('Library-management/Front-End') {
                         bat """
                         echo "Building frontend image..."
                         docker build -t ${IMAGE_NAME_FRONT}:${IMAGE_TAG} .
-                        echo "✅ Frontend image built successfully"
                         """
                     }
-
-                    // Lister les images construites
-                    bat 'docker images | findstr "library" || echo "⚠️ Aucune image trouvée"'
+                    bat 'docker images | findstr "library"'
                 }
             }
         }
@@ -71,35 +64,44 @@ pipeline {
                         docker push ${IMAGE_NAME_BACK}:${IMAGE_TAG}
                         docker push ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
                         docker logout
-                        echo "✅ Images pushed to Docker Hub"
                         """
                     }
                 }
             }
         }
 
-        /********************* 🧪 4. TEST AVEC CONTENEURS *********************/
-        stage('Run Containers for Test') {
+        /********************* 🧩 4. DEPLOY SUR KUBERNETES *********************/
+        stage('Deploy to Kubernetes') {
             steps {
                 script {
-                    // Démarrer les containers de test
-                                        bat """
-                                        docker run -d -p 9091:9090 --name test-backend ${IMAGE_NAME_BACK}:${IMAGE_TAG}
-                                        docker run -d -p 80:80 --name test-frontend ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
-                                        timeout /t 10
-                                        echo "Containers status:"
-                                        docker ps
-                                        """
-
-                                        // Test simple
-                                        bat """
-                                        echo "Testing containers..."
-                                        curl -f http://localhost:9091/actuator/health || echo "Backend health check failed"
-                                        curl -f http://localhost:80/ || echo "Frontend check failed"
-                                        """
+                    echo "Applying Kubernetes manifests..."
+                    dir('Library-management/k8s') {
+                        bat """
+                        kubectl apply -f deployment.yaml
+                        kubectl apply -f service.yaml
+                        kubectl apply -f ingress.yaml
+                        """
+                    }
+                    echo "Waiting for pods to be ready..."
+                    bat 'kubectl rollout status deployment/backend-deployment'
+                    bat 'kubectl rollout status deployment/frontend-deployment'
                 }
             }
+        }
 
+        /********************* 🌐 5. TEST ACCÈS VIA INGRESS *********************/
+        stage('Verify Ingress Access') {
+            steps {
+                script {
+                    echo "Testing application access via Ingress..."
+                    // Récupère l’IP de Minikube
+                    bat """
+                    for /f "tokens=* USEBACKQ" %%i in (`minikube ip`) do set MINIKUBE_IP=%%i
+                    echo "Minikube IP is %MINIKUBE_IP%"
+                    curl -f http://%MINIKUBE_IP%/ || (echo "❌ Frontend unreachable" & exit /b 1)
+                    """
+                }
+            }
         }
     }
 
@@ -107,16 +109,12 @@ pipeline {
     post {
         always {
             echo "Build finished: ${currentBuild.currentResult}"
-            echo "Build URL: ${env.BUILD_URL}"
         }
         success {
-            echo '✅ SUCCESS! CI/CD Pipeline working perfectly!'
-            echo "Published images:"
-            echo "   - ${IMAGE_NAME_BACK}:${IMAGE_TAG}"
-            echo "   - ${IMAGE_NAME_FRONT}:${IMAGE_TAG}"
+            echo '✅ SUCCESS! CI/CD + Kubernetes deployment working perfectly!'
         }
         failure {
-            echo '❌ Pipeline failed. Check Jenkins logs for details.'
+            echo '❌ Pipeline failed. Check Jenkins logs.'
         }
     }
 }
