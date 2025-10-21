@@ -15,12 +15,11 @@ pipeline {
     }
 
     stages {
-        /********************* 🔍 1. ANALYSE SONARCLOUD AVEC withSonarQubeEnv *********************/
+        /********************* 🔍 1. ANALYSE SONARCLOUD *********************/
         stage('SonarCloud Analysis') {
             steps {
                 dir('Library-management/Back-End') {
                     script {
-                        // ✅ UTILISER withSonarQubeEnv POUR QUE waitForQualityGate FONCTIONNE
                         withSonarQubeEnv('SonarCloud') {
                             withCredentials([string(credentialsId: 'sonarcloud-token', variable: 'SONAR_TOKEN')]) {
                                 bat """
@@ -38,7 +37,7 @@ pipeline {
             }
         }
 
-        /********************* ⏳ 2. QUALITY GATE (MAINTENANT ÇA FONCTIONNERA) *********************/
+        /********************* ⏳ 2. QUALITY GATE *********************/
         stage("Quality Gate") {
             steps {
                 timeout(time: 5, unit: 'MINUTES') {
@@ -70,6 +69,7 @@ pipeline {
         stage('Docker Build & Push') {
             steps {
                 script {
+                    // Build des images
                     dir('Library-management/Back-End') {
                         bat "docker build -t ${APP_NAME_BACK}:${IMAGE_TAG} ."
                     }
@@ -77,6 +77,7 @@ pipeline {
                         bat "docker build -t ${APP_NAME_FRONT}:${IMAGE_TAG} ."
                     }
 
+                    // Push vers Docker Hub
                     withCredentials([usernamePassword(
                         credentialsId: 'dockerhub',
                         usernameVariable: 'DOCKER_USER',
@@ -91,18 +92,62 @@ pipeline {
                         docker logout
                         echo "✅ Images Docker Hub poussées!"
                         """
+
+                        // Stocker le nom d'utilisateur Docker pour l'affichage final
+                        env.DOCKERHUB_USERNAME = DOCKER_USER
                     }
                 }
             }
         }
     }
 
+    /********************* 🏁 POST-BUILD AVEC LIENS *********************/
     post {
         always {
+            echo "=========================================="
             echo "Build finished: ${currentBuild.currentResult}"
+            echo "Build URL: ${env.BUILD_URL}"
+            echo "=========================================="
         }
         success {
-            echo '🎉 Pipeline CI/CD réussi!'
+            echo '🎉 SUCCÈS ! Pipeline CI/CD complet réussi !'
+            echo ''
+            echo '📊 RAPPORTS ET LIENS :'
+            echo '=========================================='
+            echo "🔍 SONARCLOUD - Analyse qualité du code :"
+            echo "   📈 Rapport détaillé : https://sonarcloud.io/project/overview?id=${SONAR_PROJECT_KEY}"
+            echo "   📋 Métriques : https://sonarcloud.io/project/metrics?id=${SONAR_PROJECT_KEY}"
+            echo "   🐛 Issues : https://sonarcloud.io/project/issues?id=${SONAR_PROJECT_KEY}"
+            echo ''
+            echo '🐳 DOCKER HUB - Images déployées :'
+            echo "   📦 Backend : https://hub.docker.com/r/${env.DOCKERHUB_USERNAME}/${APP_NAME_BACK}"
+            echo "   📦 Frontend : https://hub.docker.com/r/${env.DOCKERHUB_USERNAME}/${APP_NAME_FRONT}"
+            echo "   🏷️  Tag : ${IMAGE_TAG}"
+            echo ''
+            echo '📋 TESTS UNITAIRES :'
+            echo "   📊 Rapports JUnit disponibles dans Jenkins"
+            echo "   📁 Artifacts : Fichiers JAR archivés"
+            echo ''
+            echo '🔗 LIENS RAPIDES :'
+            echo "   🌐 GitHub : https://github.com/panoramac/LibraryManagement_ProjetDevops"
+            echo "   🏗️  Jenkins : ${env.BUILD_URL}"
+            echo '=========================================='
+        }
+        failure {
+            echo '💥 Échec du pipeline. Consultez les logs pour plus de détails.'
+            echo '🔍 Zones à vérifier :'
+            echo '   - Les logs SonarCloud'
+            echo '   - Les résultats des tests Maven'
+            echo '   - Les logs Docker'
+            echo '   - La configuration des credentials Jenkins'
+        }
+        unstable {
+            echo '⚠️ Build unstable - Qualité du code insuffisante'
+            echo "📊 Consultez le rapport SonarCloud : https://sonarcloud.io/project/overview?id=${SONAR_PROJECT_KEY}"
+            echo '🔧 Actions recommandées :'
+            echo '   - Corriger les bugs critiques'
+            '   - Améliorer la couverture de tests'
+            echo '   - Réduire la dette technique'
         }
     }
 }
