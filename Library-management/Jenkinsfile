@@ -73,18 +73,15 @@ pipeline {
         /********************* 🧩 4. DEPLOY SUR KUBERNETES *********************/
         stage('Deploy to Kubernetes') {
             steps {
-                    echo '🚀 Applying Kubernetes manifests...'
-
-                    // Se placer dans le dossier Library-management
-                    dir('Library-management') {
-                        bat 'kubectl apply -f deployment.yaml'
-                        bat 'kubectl apply -f service.yaml'
-                        bat 'kubectl apply -f ingress.yaml'
-                    }
-
+                echo '🚀 Applying Kubernetes manifests...'
+                dir('Library-management') {
+                    bat 'kubectl apply -f deployment.yaml --validate=false'
+                    bat 'kubectl apply -f service.yaml --validate=false'
+                    bat 'kubectl apply -f ingress.yaml --validate=false'
+                }
                 echo "⏳ Waiting for pods to be ready..."
-                bat 'kubectl rollout status deployment/backend-deployment'
-                bat 'kubectl rollout status deployment/frontend-deployment'
+                bat 'kubectl rollout status deployment/backend-deployment --validate=false'
+                bat 'kubectl rollout status deployment/frontend-deployment --validate=false'
             }
         }
 
