@@ -69,7 +69,7 @@ pipeline {
                     withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         bat """
                         echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
-                        docker push ${IMAGE_NAME_BACK}:${IMAGE_TAG}
+                        ocker push ${IMAGE_NAME_BACK}:${IMAGE_TAG}
                         docker push ${IMAGE_NAME_FRONT}:${IMAGE_TAG}
                         docker logout
                         echo "Images pushed to Docker Hub"
@@ -103,8 +103,8 @@ pipeline {
 
                     // Nettoyage
                     bat """
-                    docker stop test-backend test-frontend
-                    docker rm test-backend test-frontend
+                    // docker stop test-backend test-frontend
+                    // docker rm test-backend test-frontend
                     echo "Test completed"
                     """
                 }
